@@ -141,7 +141,7 @@
       </div>
     </div>
 
-    <div class="footer">v1.2 — Faster search (debounce+cache), thumbnails in deck, quantities.</div>
+    <div class="footer">v1.3 — Firestore + search + thumbnails (auto backfill).</div>
   </div>
 </div>
 
@@ -223,7 +223,7 @@
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
 
-  // ====== UI Render (thumbnails) ======
+  // ====== UI Render (with thumbnails) ======
   function render(){
     const list = byId('list');
     list.innerHTML = '';
@@ -233,8 +233,10 @@
     cards.forEach(c=>{
       const li = document.createElement('li'); li.className='deck-item';
       const leftWrap = document.createElement('div'); leftWrap.className='left';
-      const img = document.createElement('img'); img.className='thumb'; img.loading='lazy'; img.decoding='async'; img.alt=c.name||c.id; img.src = c.image || '';
-      if(!img.src){ img.style.display='none'; }
+      const img = document.createElement('img'); img.className='thumb'; img.loading='lazy'; img.decoding='async'; img.alt=c.name||c.id;
+      if (c.image) { img.src=c.image; } else { img.style.display='none'; }
+      img.onerror = ()=>{ img.style.display='none'; };
+
       const text = document.createElement('div');
       text.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''} <span class="pill">x${c.qty||1}</span></div>
                         <div class="muted">Added ${new Date(c.added_at||Date.now()).toLocaleString()}</div>`;
@@ -250,7 +252,72 @@
       li.appendChild(right);
       list.appendChild(li);
     });
+
+    // Backfill thumbnails that are missing (async)
+    debouncedBackfill();
   }
+
+  // ====== Image backfill helpers ======
+  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826';
+  const searchCache = new Map(); // name -> results
+  const idCache = new Map();     // id -> card
+  const imageCache = new Map();  // id -> image url
+
+  function debounce(fn, wait=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
+
+  function parseSetNumFromId(id){
+    const m = String(id||'').toLowerCase().match(/^([a-z0-9]+)-([a-z0-9]+)$/);
+    if (!m) return null; return { set:m[1], num:m[2] };
+  }
+  const cdnUrl = (set,num)=>`https://images.pokemontcg.io/${set}/${num}.png`;
+
+  async function fetchCardById(id){
+    const norm = (id||'').toLowerCase();
+    if (idCache.has(norm)) return idCache.get(norm);
+    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+    const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(norm)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const card = j.data || null; if(card) idCache.set(norm, card); return card;
+  }
+
+  async function urlExists(url){ try { const r = await fetch(url, { method:'HEAD' }); return r.ok; } catch { return false; } }
+
+  async function resolveImageForCardId(id){
+    const norm = (id||'').toLowerCase();
+    if (imageCache.has(norm)) return imageCache.get(norm);
+
+    // 1) Try API by ID
+    const viaId = await fetchCardById(norm);
+    if (viaId?.images?.small){ imageCache.set(norm, viaId.images.small); return viaId.images.small; }
+
+    // 2) Try set+number → CDN, then API query
+    const sn = parseSetNumFromId(norm);
+    if (sn){
+      const fast = cdnUrl(sn.set, sn.num);
+      if (await urlExists(fast)) { imageCache.set(norm, fast); return fast; }
+      const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+      const q = encodeURIComponent(`set.id:${sn.set} number:${sn.num}`);
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`, { headers });
+      if (r.ok){ const j = await r.json(); const c = (j.data||[])[0]; if (c?.images?.small){ imageCache.set(norm, c.images.small); return c.images.small; } }
+    }
+
+    imageCache.set(norm, '');
+    return '';
+  }
+
+  const debouncedBackfill = debounce(async ()=>{
+    const cards = (currentDeck?.cards)||[];
+    const next = [...cards];
+    let changed = false;
+    for (let i=0;i<next.length;i++){
+      if (!next[i].image){
+        const img = await resolveImageForCardId(next[i].id);
+        if (img){ next[i] = { ...next[i], image: img }; changed = true; }
+      }
+    }
+    if (changed){ await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() }); }
+  }, 250);
 
   // ====== Actions (qty + thumbnails) ======
   async function addCard(id, name, qty, image){
@@ -326,9 +393,8 @@
     const id = byId('cardId').value;
     const name = byId('cardName').value;
     const qty = byId('qty').value;
-    // If the user typed a full PokémonTCG.io ID, fetch image fast
-    const card = await fetchCardByIdIfLooksLikeTcgId(id).catch(()=>null);
-    await addCard(id, name || card?.name || '', qty, card?.images?.small || '');
+    const img = await resolveImageForCardId(id);
+    await addCard(id, name || '', qty, img);
   };
   byId('decreaseBtn').onclick = () => changeQty(byId('cardId').value, -1);
   byId('removeBtn').onclick = () => removeCard(byId('cardId').value);
@@ -358,13 +424,7 @@
   };
 
   // ====== Pokémon TCG API search (debounced + cached) ======
-  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826';
-  const searchCache = new Map(); // name -> results
-  const idCache = new Map();     // id -> card
-
-  function debounce(fn, wait=300){
-    let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); };
-  }
+  function debounceSearch(fn, wait=350){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
 
   async function searchCardsByName(name){
     const key = name.toLowerCase().trim();
@@ -377,26 +437,12 @@
     const json = await res.json();
     const data = json.data || [];
     searchCache.set(key, data);
-    // seed idCache for instant lookups later
     data.forEach(c=> idCache.set((c.id||'').toLowerCase(), c));
     return data;
   }
 
-  async function fetchCardByIdIfLooksLikeTcgId(id){
-    const norm = normalizeId(id);
-    if (!norm || !/^[a-z0-9-]+\d$/i.test(norm)) return null; // quick heuristic
-    if (idCache.has(norm)) return idCache.get(norm);
-    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
-    const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(norm)}`, { headers });
-    if (!r.ok) return null;
-    const j = await r.json();
-    const card = j.data || null;
-    if (card) idCache.set(norm, card);
-    return card;
-  }
-
   const results = byId('results');
-  const doSearch = debounce(async ()=>{
+  const doSearch = debounceSearch(async ()=>{
     const name = byId('searchName').value.trim();
     if(!name){ results.innerHTML = '<li class="muted">Type a name to search.</li>'; return; }
     results.innerHTML = '<li class="muted">Searching…</li>';
@@ -407,7 +453,7 @@
       cards.forEach(card=>{
         const id = (card.id || `${card.set?.id||'set'}-${card.number}`).toLowerCase();
         const li = document.createElement('li'); li.className='result';
-        const img = document.createElement('img'); img.src = card.images?.small || ''; img.alt = card.name; img.loading='lazy'; img.decoding='async';
+        const img = document.createElement('img'); img.src = card.images?.small || ''; img.alt = card.name; img.loading='lazy'; img.decoding='async'; img.onerror=()=>{ img.style.display='none'; };
         const info = document.createElement('div');
         info.innerHTML = `<div><strong>${card.name}</strong> — ${card.set?.name||''} #${card.number} <span class="pill">${id}</span></div>`;
         const add = document.createElement('button'); add.textContent='Add'; add.className='btn'; add.onclick=()=> addCard(id, card.name, 1, card.images?.small || '');
