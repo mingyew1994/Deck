@@ -27,6 +27,14 @@
     @media(min-width:1000px){ .grid { grid-template-columns: 3fr 2fr; } }
     ul { list-style:none; padding:0; margin:0; }
     li { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
+
+    /* Grid layout for deck list */
+    .deck-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    .deck-grid li { flex-direction: column; align-items:stretch; margin:0; }
+    .deck-grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; margin:0 0 8px 0; }
+    .deck-grid .meta { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .deck-grid .title { font-weight:600; }
+    .deck-grid .controls { display:flex; gap:8px; margin-top:8px; }
     .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
     .muted { color:var(--muted); font-size:13px; }
     .spacer { height:6px; }
@@ -96,7 +104,7 @@
             <span class="muted" id="countLabel">0 cards</span>
           </div>
           <div class="spacer"></div>
-          <ul id="list"></ul>
+          <ul id="list" class="deck-grid"></ul>
         </div>
       </div>
 
@@ -232,24 +240,27 @@
     byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
     cards.forEach(c=>{
       const li = document.createElement('li'); li.className='deck-item';
-      const leftWrap = document.createElement('div'); leftWrap.className='left';
+
       const img = document.createElement('img'); img.className='thumb'; img.loading='lazy'; img.decoding='async'; img.alt=c.name||c.id;
       if (c.image) { img.src=c.image; } else { img.style.display='none'; }
       img.onerror = ()=>{ img.style.display='none'; };
 
-      const text = document.createElement('div');
-      text.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''} <span class="pill">x${c.qty||1}</span></div>
-                        <div class="muted">Added ${new Date(c.added_at||Date.now()).toLocaleString()}</div>`;
-      leftWrap.appendChild(img); leftWrap.appendChild(text);
+      const title = document.createElement('div'); title.className='title';
+      title.innerHTML = `<span><strong>${c.name||c.id}</strong>${c.name?` <span class=\"muted\">(${c.id})</span>`:''}</span> <span class=\"pill\">x${c.qty||1}</span>`;
 
-      const right = document.createElement('div');
+      const added = document.createElement('div'); added.className='muted';
+      added.textContent = `Added ${new Date(c.added_at||Date.now()).toLocaleString()}`;
+
+      const controls = document.createElement('div'); controls.className='controls';
       const inc = document.createElement('button'); inc.textContent = '+1'; inc.className='btn'; inc.onclick=()=> changeQty(c.id, +1);
-      const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.style.marginLeft='6px'; dec.onclick=()=> changeQty(c.id, -1);
-      const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.style.marginLeft='6px'; del.onclick = ()=> removeCard(c.id);
-      right.appendChild(inc); right.appendChild(dec); right.appendChild(del);
+      const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.onclick=()=> changeQty(c.id, -1);
+      const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.onclick = ()=> removeCard(c.id);
+      controls.appendChild(inc); controls.appendChild(dec); controls.appendChild(del);
 
-      li.appendChild(leftWrap);
-      li.appendChild(right);
+      li.appendChild(img);
+      li.appendChild(title);
+      li.appendChild(added);
+      li.appendChild(controls);
       list.appendChild(li);
     });
 
