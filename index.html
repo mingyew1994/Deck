@@ -127,7 +127,7 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Search uses the public Pokémon TCG API. Add an API key later for higher limits.</li>
+            <li>Search uses the public Pokémon TCG API. Add your API key for higher limits.</li>
             <li>Each card row shows a quantity badge (xN). Use +1 / -1 to adjust quickly.</li>
             <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
           </ul>
@@ -215,7 +215,7 @@
 
   function normalizeId(s){ return (s||'').trim().toLowerCase(); }
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
+  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
 
   // ====== UI Render ======
   function render(){
@@ -339,8 +339,9 @@
   };
 
   // ====== Pokémon TCG API search ======
-  // Optional: get a free API key at https://dev.pokemontcg.io/ and paste below.
-  const POKETCG_KEY = '';
+  // Your API key (optional but recommended for rate limits)
+  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826';
+
   async function searchCardsByName(name){
     const q = encodeURIComponent(`name:"${name}"`);
     const url = `https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=12`;
