@@ -423,16 +423,16 @@
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
   };
 
-  // ====== Pokémon TCG API search (debounced + cached) ======
-  function debounceSearch(fn, wait=350){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
+  // ====== Pokémon TCG API search (click-only with cancel) ======
+  let searchController = null; // AbortController to cancel in-flight search
 
-  async function searchCardsByName(name){
+  async function searchCardsByName(name, signal){
     const key = name.toLowerCase().trim();
     if (searchCache.has(key)) return searchCache.get(key);
     const q = encodeURIComponent(`name:"${name}"`);
     const url = `https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=20`;
     const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal });
     if(!res.ok) throw new Error('Search failed');
     const json = await res.json();
     const data = json.data || [];
@@ -441,13 +441,20 @@
     return data;
   }
 
-  const results = byId('results');
-  const doSearch = debounceSearch(async ()=>{
+  async function doSearch(){
     const name = byId('searchName').value.trim();
-    if(!name){ results.innerHTML = '<li class="muted">Type a name to search.</li>'; return; }
+    const results = byId('results');
+    if(!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
+
+    // cancel any previous search
+    if (searchController) searchController.abort();
+    searchController = new AbortController();
+    const { signal } = searchController;
+
     results.innerHTML = '<li class="muted">Searching…</li>';
+    byId('searchBtn').disabled = true;
     try{
-      const cards = await searchCardsByName(name);
+      const cards = await searchCardsByName(name, signal);
       results.innerHTML = '';
       if(cards.length===0){ results.innerHTML = '<li class="muted">No matches.</li>'; return; }
       cards.forEach(card=>{
@@ -460,11 +467,18 @@
         li.appendChild(img); li.appendChild(info); li.appendChild(add);
         results.appendChild(li);
       });
-    }catch(e){ results.innerHTML = `<li class=\"muted\">Search error: ${e.message}</li>`; }
-  }, 350);
+    }catch(e){
+      if (e.name === 'AbortError') {
+        // silently ignore aborted searches
+      } else {
+        results.innerHTML = `<li class=\"muted\">Search error: ${e.message}</li>`;
+      }
+    } finally {
+      byId('searchBtn').disabled = false;
+    }
+  }
 
   byId('searchBtn').onclick = doSearch;
-  byId('searchName').addEventListener('input', doSearch);
 
   // ====== Start if slug present ======
   if (slug) { subscribe(); }
