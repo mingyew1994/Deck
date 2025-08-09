@@ -27,14 +27,6 @@
     @media(min-width:1000px){ .grid { grid-template-columns: 3fr 2fr; } }
     ul { list-style:none; padding:0; margin:0; }
     li { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
-
-    /* Grid layout for deck list */
-    .deck-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
-    .deck-grid li { flex-direction: column; align-items:stretch; margin:0; }
-    .deck-grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; margin:0 0 8px 0; }
-    .deck-grid .meta { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-    .deck-grid .title { font-weight:600; }
-    .deck-grid .controls { display:flex; gap:8px; margin-top:8px; }
     .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
     .muted { color:var(--muted); font-size:13px; }
     .spacer { height:6px; }
@@ -44,10 +36,12 @@
     .result { display:flex; gap:10px; align-items:center; }
     .result img { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
 
-    /* Deck list with thumbnails */
-    .deck-item { align-items:center; }
-    .thumb { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; margin-right:10px; }
-    .left { display:flex; align-items:center; gap:10px; }
+    /* Deck grid layout with thumbnails */
+    .deck-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    .deck-grid li { flex-direction: column; align-items:stretch; margin:0; }
+    .deck-grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; margin:0 0 8px 0; border:1px solid #203040; background:#0b1320; }
+    .deck-grid .title { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .deck-grid .controls { display:flex; gap:8px; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -141,15 +135,15 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Search uses Pokémon TCG API with your key; results are cached and debounced for speed.</li>
-            <li>Each deck row shows a thumbnail and quantity badge (xN). Use +1 / -1 to adjust quickly.</li>
+            <li>Search runs only on click/Enter and cancels previous requests.</li>
+            <li>Deck shows thumbnails; images auto-backfill and are cached.</li>
             <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.3 — Firestore + search + thumbnails (auto backfill).</div>
+    <div class="footer">v1.4 — Click/Enter search + cancel • Thumbnails with backfill • Quantities.</div>
   </div>
 </div>
 
@@ -231,7 +225,7 @@
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
 
-  // ====== UI Render (with thumbnails) ======
+  // ====== UI Render (grid + thumbnails) ======
   function render(){
     const list = byId('list');
     list.innerHTML = '';
@@ -239,7 +233,7 @@
     const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
     byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
     cards.forEach(c=>{
-      const li = document.createElement('li'); li.className='deck-item';
+      const li = document.createElement('li');
 
       const img = document.createElement('img'); img.className='thumb'; img.loading='lazy'; img.decoding='async'; img.alt=c.name||c.id;
       if (c.image) { img.src=c.image; } else { img.style.display='none'; }
@@ -268,19 +262,11 @@
     debouncedBackfill();
   }
 
-  // ====== Image backfill helpers ======
+  // ====== Pokémon TCG helpers (search + images) ======
   const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826';
   const searchCache = new Map(); // name -> results
-  const idCache = new Map();     // id -> card
+  const idCache = new Map();     // id -> full card json
   const imageCache = new Map();  // id -> image url
-
-  function debounce(fn, wait=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
-
-  function parseSetNumFromId(id){
-    const m = String(id||'').toLowerCase().match(/^([a-z0-9]+)-([a-z0-9]+)$/);
-    if (!m) return null; return { set:m[1], num:m[2] };
-  }
-  const cdnUrl = (set,num)=>`https://images.pokemontcg.io/${set}/${num}.png`;
 
   async function fetchCardById(id){
     const norm = (id||'').toLowerCase();
@@ -292,6 +278,11 @@
     const card = j.data || null; if(card) idCache.set(norm, card); return card;
   }
 
+  function parseSetNumFromId(id){
+    const m = String(id||'').toLowerCase().match(/^([a-z0-9]+)-([a-z0-9]+)$/);
+    if (!m) return null; return { set:m[1], num:m[2] };
+  }
+  const cdnUrl = (set,num)=>`https://images.pokemontcg.io/${set}/${num}.png`;
   async function urlExists(url){ try { const r = await fetch(url, { method:'HEAD' }); return r.ok; } catch { return false; } }
 
   async function resolveImageForCardId(id){
@@ -302,7 +293,7 @@
     const viaId = await fetchCardById(norm);
     if (viaId?.images?.small){ imageCache.set(norm, viaId.images.small); return viaId.images.small; }
 
-    // 2) Try set+number → CDN, then API query
+    // 2) Try set+number → CDN then API query
     const sn = parseSetNumFromId(norm);
     if (sn){
       const fast = cdnUrl(sn.set, sn.num);
@@ -317,6 +308,7 @@
     return '';
   }
 
+  // ====== Image backfill after render ======
   const debouncedBackfill = debounce(async ()=>{
     const cards = (currentDeck?.cards)||[];
     const next = [...cards];
@@ -329,6 +321,7 @@
     }
     if (changed){ await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() }); }
   }, 250);
+  function debounce(fn, wait=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
 
   // ====== Actions (qty + thumbnails) ======
   async function addCard(id, name, qty, image){
@@ -434,7 +427,7 @@
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
   };
 
-  // ====== Pokémon TCG API search (click-only with cancel) ======
+  // ====== Search (click or Enter) with cancel ======
   let searchController = null; // AbortController to cancel in-flight search
 
   async function searchCardsByName(name, signal){
@@ -457,7 +450,6 @@
     const results = byId('results');
     if(!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
 
-    // cancel any previous search
     if (searchController) searchController.abort();
     searchController = new AbortController();
     const { signal } = searchController;
@@ -480,7 +472,7 @@
       });
     }catch(e){
       if (e.name === 'AbortError') {
-        // silently ignore aborted searches
+        // aborted: ignore
       } else {
         results.innerHTML = `<li class=\"muted\">Search error: ${e.message}</li>`;
       }
@@ -490,6 +482,9 @@
   }
 
   byId('searchBtn').onclick = doSearch;
+  byId('searchName').addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+  });
 
   // ====== Start if slug present ======
   if (slug) { subscribe(); }
