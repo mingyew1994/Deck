@@ -8,7 +8,7 @@
     :root { --bg:#0b0f14; --card:#121922; --text:#ecf2f8; --muted:#9fb3c8; --accent:#57b2ff; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,#0b0f14,#0b0f14 60%,#0e141b); color:var(--text); }
-    .wrap { max-width: 920px; margin: 0 auto; padding: 20px; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
     .card { background: var(--card); border:1px solid #1d2633; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing:.2px; }
     .sub { color: var(--muted); margin-bottom: 14px; }
@@ -24,7 +24,7 @@
     .btn.primary { background:var(--accent); color:#00121f; border-color:transparent; }
     .btn.primary:hover { filter:brightness(1.05); }
     .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
-    @media(min-width:840px){ .grid { grid-template-columns: 3fr 2fr; } }
+    @media(min-width:920px){ .grid { grid-template-columns: 3fr 2fr; } }
     ul { list-style:none; padding:0; margin:0; }
     li { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
     .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
@@ -32,6 +32,8 @@
     .spacer { height:6px; }
     .footer { text-align:center; color:#6a7f93; font-size:12px; margin-top:14px; }
     .hidden { display:none; }
+    .result { display:flex; gap:10px; align-items:center; }
+    .result img { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
   </style>
 </head>
 <body>
@@ -60,13 +62,26 @@
     <div class="grid" id="app" class="hidden">
       <div class="stack">
         <div class="row">
-          <input id="cardId" placeholder="Card ID (e.g., sv4-123)" style="flex:2; min-width:180px" />
-          <input id="cardName" placeholder="Name (optional)" style="flex:3; min-width:200px" />
+          <input id="cardId" placeholder="Card ID (e.g., sv4-123)" style="flex:2; min-width:140px" />
+          <input id="cardName" placeholder="Name (optional)" style="flex:3; min-width:160px" />
+          <input id="qty" type="number" min="1" value="1" style="width:90px" title="Quantity" />
         </div>
         <div class="row">
-          <button id="addBtn" class="btn primary">Add to deck</button>
-          <button id="removeBtn" class="btn">Remove from deck</button>
+          <button id="addBtn" class="btn primary">Add / Increase</button>
+          <button id="decreaseBtn" class="btn">Decrease</button>
+          <button id="removeBtn" class="btn">Remove card</button>
           <button id="checkBtn" class="btn">Check in deck?</button>
+        </div>
+
+        <div class="card">
+          <strong>Search Pokémon cards</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <input id="searchName" placeholder="Type card name (e.g., Charizard)" style="flex:1; min-width:240px" />
+            <button id="searchBtn" class="btn">Search</button>
+          </div>
+          <div class="spacer"></div>
+          <ul id="results"></ul>
         </div>
 
         <div class="card">
@@ -112,15 +127,15 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Use Pokémon card IDs like <code>sv4-123</code>. Name is optional.</li>
+            <li>Search uses the public Pokémon TCG API. Add an API key later for higher limits.</li>
+            <li>Each card row shows a quantity badge (xN). Use +1 / -1 to adjust quickly.</li>
             <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
-            <li>Write the URL onto your NFC tag with any NFC writer app.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.0 — Firebase Firestore, real-time sync, no login.</div>
+    <div class="footer">v1.1 — Firestore with quantities + Pokémon search.</div>
   </div>
 </div>
 
@@ -207,18 +222,18 @@
     const list = byId('list');
     list.innerHTML = '';
     const cards = (currentDeck?.cards)||[];
-    byId('countLabel').textContent = fmtCount(cards.length);
+    const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
+    byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
     cards.forEach(c=>{
       const li = document.createElement('li');
       const left = document.createElement('div');
-      left.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''}</div>
+      left.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''} <span class="pill">x${c.qty||1}</span></div>
                         <div class="muted">Added ${new Date(c.added_at||Date.now()).toLocaleString()}</div>`;
       const right = document.createElement('div');
-      const del = document.createElement('button');
-      del.textContent = 'Remove';
-      del.className = 'btn';
-      del.onclick = ()=> removeCard(c.id);
-      right.appendChild(del);
+      const inc = document.createElement('button'); inc.textContent = '+1'; inc.className='btn'; inc.onclick=()=> changeQty(c.id, +1);
+      const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.style.marginLeft='6px'; dec.onclick=()=> changeQty(c.id, -1);
+      const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.style.marginLeft='6px'; del.onclick = ()=> removeCard(c.id);
+      right.appendChild(inc); right.appendChild(dec); right.appendChild(del);
       li.appendChild(left);
       li.appendChild(right);
       list.appendChild(li);
@@ -226,14 +241,33 @@
   }
 
   // ====== Actions ======
-  async function addCard(id, name){
+  async function addCard(id, name, qty){
     id = normalizeId(id);
+    qty = Math.max(1, Number(qty||1));
     if(!id){ alert('Please enter a Card ID (e.g., sv4-123).'); return; }
     const cards = (currentDeck?.cards)||[];
-    if (cards.some(c=>c.id===id)) { alert('That ID is already in this deck.'); return; }
-    const next = [...cards, { id, name:(name||'').trim(), added_at: new Date().toISOString() }];
+    const idx = cards.findIndex(c=>c.id===id);
+    if (idx>=0){
+      const next = [...cards];
+      next[idx] = { ...next[idx], qty: (Number(next[idx].qty||1) + qty) };
+      await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    } else {
+      const next = [...cards, { id, name:(name||'').trim(), qty, added_at: new Date().toISOString() }];
+      await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    }
+    byId('cardId').value=''; byId('cardName').value=''; byId('qty').value='1';
+  }
+
+  async function changeQty(id, delta){
+    id = normalizeId(id);
+    const cards = (currentDeck?.cards)||[];
+    const idx = cards.findIndex(c=>c.id===id);
+    if (idx<0) return;
+    const next = [...cards];
+    const newQty = Math.max(0, Number(next[idx].qty||1) + delta);
+    if (newQty===0){ next.splice(idx,1); }
+    else { next[idx] = { ...next[idx], qty:newQty }; }
     await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
-    byId('cardId').value=''; byId('cardName').value='';
   }
 
   async function removeCard(id){
@@ -276,7 +310,8 @@
     subscribe();
   };
 
-  byId('addBtn').onclick = () => addCard(byId('cardId').value, byId('cardName').value);
+  byId('addBtn').onclick = () => addCard(byId('cardId').value, byId('cardName').value, byId('qty').value);
+  byId('decreaseBtn').onclick = () => changeQty(byId('cardId').value, -1);
   byId('removeBtn').onclick = () => removeCard(byId('cardId').value);
   byId('checkBtn').onclick = () => checkCard(byId('cardId').value);
 
@@ -288,7 +323,7 @@
     try{
       const data = JSON.parse(byId('jsonArea').value);
       if(!data.cards || !Array.isArray(data.cards)) throw new Error('Invalid JSON: missing "cards" array.');
-      await updateDoc(deckRef(), { cards: data.cards.map(c=>({ id: normalizeId(c.id), name:(c.name||'').trim(), added_at: c.added_at || new Date().toISOString() })), updated_at: serverTimestamp() });
+      await updateDoc(deckRef(), { cards: data.cards.map(c=>({ id: normalizeId(c.id), name:(c.name||'').trim(), qty: Math.max(1, Number(c.qty||1)), added_at: c.added_at || new Date().toISOString() })), updated_at: serverTimestamp() });
       alert('Imported!');
     }catch(e){ alert('Import failed: ' + e.message); }
   };
@@ -301,6 +336,41 @@
 
   byId('copyUrlBtn').onclick = async () => {
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
+  };
+
+  // ====== Pokémon TCG API search ======
+  // Optional: get a free API key at https://dev.pokemontcg.io/ and paste below.
+  const POKETCG_KEY = '';
+  async function searchCardsByName(name){
+    const q = encodeURIComponent(`name:"${name}"`);
+    const url = `https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=12`;
+    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+    const res = await fetch(url, { headers });
+    if(!res.ok) throw new Error('Search failed');
+    const json = await res.json();
+    return json.data || [];
+  }
+
+  byId('searchBtn').onclick = async ()=>{
+    const name = byId('searchName').value.trim();
+    const results = byId('results');
+    if(!name){ results.innerHTML = '<li class="muted">Type a name to search.</li>'; return; }
+    results.innerHTML = '<li class="muted">Searching…</li>';
+    try{
+      const cards = await searchCardsByName(name);
+      results.innerHTML = '';
+      if(cards.length===0){ results.innerHTML = '<li class="muted">No matches.</li>'; return; }
+      cards.forEach(card=>{
+        const id = (card.id || `${card.set?.id||'set'}-${card.number}`).toLowerCase();
+        const li = document.createElement('li'); li.className='result';
+        const img = document.createElement('img'); img.src = card.images?.small || ''; img.alt = card.name;
+        const info = document.createElement('div');
+        info.innerHTML = `<div><strong>${card.name}</strong> — ${card.set?.name||''} #${card.number} <span class="pill">${id}</span></div>`;
+        const add = document.createElement('button'); add.textContent='Add'; add.className='btn'; add.onclick=()=> addCard(id, card.name, 1);
+        li.appendChild(img); li.appendChild(info); li.appendChild(add);
+        results.appendChild(li);
+      });
+    }catch(e){ results.innerHTML = `<li class="muted">Search error: ${e.message}</li>`; }
   };
 
   // ====== Start if slug present ======
