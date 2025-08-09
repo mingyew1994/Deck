@@ -8,7 +8,7 @@
     :root { --bg:#0b0f14; --card:#121922; --text:#ecf2f8; --muted:#9fb3c8; --accent:#57b2ff; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,#0b0f14,#0b0f14 60%,#0e141b); color:var(--text); }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 20px; }
     .card { background: var(--card); border:1px solid #1d2633; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing:.2px; }
     .sub { color: var(--muted); margin-bottom: 14px; }
@@ -24,7 +24,7 @@
     .btn.primary { background:var(--accent); color:#00121f; border-color:transparent; }
     .btn.primary:hover { filter:brightness(1.05); }
     .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
-    @media(min-width:920px){ .grid { grid-template-columns: 3fr 2fr; } }
+    @media(min-width:1000px){ .grid { grid-template-columns: 3fr 2fr; } }
     ul { list-style:none; padding:0; margin:0; }
     li { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
     .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
@@ -32,8 +32,14 @@
     .spacer { height:6px; }
     .footer { text-align:center; color:#6a7f93; font-size:12px; margin-top:14px; }
     .hidden { display:none; }
+
     .result { display:flex; gap:10px; align-items:center; }
     .result img { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
+
+    /* Deck list with thumbnails */
+    .deck-item { align-items:center; }
+    .thumb { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; margin-right:10px; }
+    .left { display:flex; align-items:center; gap:10px; }
   </style>
 </head>
 <body>
@@ -62,7 +68,7 @@
     <div class="grid" id="app" class="hidden">
       <div class="stack">
         <div class="row">
-          <input id="cardId" placeholder="Card ID (e.g., sv4-123)" style="flex:2; min-width:140px" />
+          <input id="cardId" placeholder="Card ID (e.g., sv4-123 or full tcg.id)" style="flex:2; min-width:140px" />
           <input id="cardName" placeholder="Name (optional)" style="flex:3; min-width:160px" />
           <input id="qty" type="number" min="1" value="1" style="width:90px" title="Quantity" />
         </div>
@@ -127,15 +133,15 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Search uses the public Pokémon TCG API. Add your API key for higher limits.</li>
-            <li>Each card row shows a quantity badge (xN). Use +1 / -1 to adjust quickly.</li>
+            <li>Search uses Pokémon TCG API with your key; results are cached and debounced for speed.</li>
+            <li>Each deck row shows a thumbnail and quantity badge (xN). Use +1 / -1 to adjust quickly.</li>
             <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.1 — Firestore with quantities + Pokémon search.</div>
+    <div class="footer">v1.2 — Faster search (debounce+cache), thumbnails in deck, quantities.</div>
   </div>
 </div>
 
@@ -215,9 +221,9 @@
 
   function normalizeId(s){ return (s||'').trim().toLowerCase(); }
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
-  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
 
-  // ====== UI Render ======
+  // ====== UI Render (thumbnails) ======
   function render(){
     const list = byId('list');
     list.innerHTML = '';
@@ -225,23 +231,29 @@
     const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
     byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
     cards.forEach(c=>{
-      const li = document.createElement('li');
-      const left = document.createElement('div');
-      left.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''} <span class="pill">x${c.qty||1}</span></div>
+      const li = document.createElement('li'); li.className='deck-item';
+      const leftWrap = document.createElement('div'); leftWrap.className='left';
+      const img = document.createElement('img'); img.className='thumb'; img.loading='lazy'; img.decoding='async'; img.alt=c.name||c.id; img.src = c.image || '';
+      if(!img.src){ img.style.display='none'; }
+      const text = document.createElement('div');
+      text.innerHTML = `<div><strong>${c.id}</strong>${c.name?` — ${escapeHtml(c.name)}`:''} <span class="pill">x${c.qty||1}</span></div>
                         <div class="muted">Added ${new Date(c.added_at||Date.now()).toLocaleString()}</div>`;
+      leftWrap.appendChild(img); leftWrap.appendChild(text);
+
       const right = document.createElement('div');
       const inc = document.createElement('button'); inc.textContent = '+1'; inc.className='btn'; inc.onclick=()=> changeQty(c.id, +1);
       const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.style.marginLeft='6px'; dec.onclick=()=> changeQty(c.id, -1);
       const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.style.marginLeft='6px'; del.onclick = ()=> removeCard(c.id);
       right.appendChild(inc); right.appendChild(dec); right.appendChild(del);
-      li.appendChild(left);
+
+      li.appendChild(leftWrap);
       li.appendChild(right);
       list.appendChild(li);
     });
   }
 
-  // ====== Actions ======
-  async function addCard(id, name, qty){
+  // ====== Actions (qty + thumbnails) ======
+  async function addCard(id, name, qty, image){
     id = normalizeId(id);
     qty = Math.max(1, Number(qty||1));
     if(!id){ alert('Please enter a Card ID (e.g., sv4-123).'); return; }
@@ -249,10 +261,10 @@
     const idx = cards.findIndex(c=>c.id===id);
     if (idx>=0){
       const next = [...cards];
-      next[idx] = { ...next[idx], qty: (Number(next[idx].qty||1) + qty) };
+      next[idx] = { ...next[idx], qty: (Number(next[idx].qty||1) + qty), image: next[idx].image || image || '' };
       await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
     } else {
-      const next = [...cards, { id, name:(name||'').trim(), qty, added_at: new Date().toISOString() }];
+      const next = [...cards, { id, name:(name||'').trim(), qty, image: image||'', added_at: new Date().toISOString() }];
       await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
     }
     byId('cardId').value=''; byId('cardName').value=''; byId('qty').value='1';
@@ -310,7 +322,14 @@
     subscribe();
   };
 
-  byId('addBtn').onclick = () => addCard(byId('cardId').value, byId('cardName').value, byId('qty').value);
+  byId('addBtn').onclick = async () => {
+    const id = byId('cardId').value;
+    const name = byId('cardName').value;
+    const qty = byId('qty').value;
+    // If the user typed a full PokémonTCG.io ID, fetch image fast
+    const card = await fetchCardByIdIfLooksLikeTcgId(id).catch(()=>null);
+    await addCard(id, name || card?.name || '', qty, card?.images?.small || '');
+  };
   byId('decreaseBtn').onclick = () => changeQty(byId('cardId').value, -1);
   byId('removeBtn').onclick = () => removeCard(byId('cardId').value);
   byId('checkBtn').onclick = () => checkCard(byId('cardId').value);
@@ -323,7 +342,7 @@
     try{
       const data = JSON.parse(byId('jsonArea').value);
       if(!data.cards || !Array.isArray(data.cards)) throw new Error('Invalid JSON: missing "cards" array.');
-      await updateDoc(deckRef(), { cards: data.cards.map(c=>({ id: normalizeId(c.id), name:(c.name||'').trim(), qty: Math.max(1, Number(c.qty||1)), added_at: c.added_at || new Date().toISOString() })), updated_at: serverTimestamp() });
+      await updateDoc(deckRef(), { cards: data.cards.map(c=>({ id: normalizeId(c.id), name:(c.name||'').trim(), qty: Math.max(1, Number(c.qty||1)), image: c.image||'', added_at: c.added_at || new Date().toISOString() })), updated_at: serverTimestamp() });
       alert('Imported!');
     }catch(e){ alert('Import failed: ' + e.message); }
   };
@@ -338,23 +357,47 @@
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
   };
 
-  // ====== Pokémon TCG API search ======
-  // Your API key (optional but recommended for rate limits)
+  // ====== Pokémon TCG API search (debounced + cached) ======
   const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826';
+  const searchCache = new Map(); // name -> results
+  const idCache = new Map();     // id -> card
+
+  function debounce(fn, wait=300){
+    let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); };
+  }
 
   async function searchCardsByName(name){
+    const key = name.toLowerCase().trim();
+    if (searchCache.has(key)) return searchCache.get(key);
     const q = encodeURIComponent(`name:"${name}"`);
-    const url = `https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=12`;
+    const url = `https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=20`;
     const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
     const res = await fetch(url, { headers });
     if(!res.ok) throw new Error('Search failed');
     const json = await res.json();
-    return json.data || [];
+    const data = json.data || [];
+    searchCache.set(key, data);
+    // seed idCache for instant lookups later
+    data.forEach(c=> idCache.set((c.id||'').toLowerCase(), c));
+    return data;
   }
 
-  byId('searchBtn').onclick = async ()=>{
+  async function fetchCardByIdIfLooksLikeTcgId(id){
+    const norm = normalizeId(id);
+    if (!norm || !/^[a-z0-9-]+\d$/i.test(norm)) return null; // quick heuristic
+    if (idCache.has(norm)) return idCache.get(norm);
+    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+    const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(norm)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const card = j.data || null;
+    if (card) idCache.set(norm, card);
+    return card;
+  }
+
+  const results = byId('results');
+  const doSearch = debounce(async ()=>{
     const name = byId('searchName').value.trim();
-    const results = byId('results');
     if(!name){ results.innerHTML = '<li class="muted">Type a name to search.</li>'; return; }
     results.innerHTML = '<li class="muted">Searching…</li>';
     try{
@@ -364,15 +407,18 @@
       cards.forEach(card=>{
         const id = (card.id || `${card.set?.id||'set'}-${card.number}`).toLowerCase();
         const li = document.createElement('li'); li.className='result';
-        const img = document.createElement('img'); img.src = card.images?.small || ''; img.alt = card.name;
+        const img = document.createElement('img'); img.src = card.images?.small || ''; img.alt = card.name; img.loading='lazy'; img.decoding='async';
         const info = document.createElement('div');
         info.innerHTML = `<div><strong>${card.name}</strong> — ${card.set?.name||''} #${card.number} <span class="pill">${id}</span></div>`;
-        const add = document.createElement('button'); add.textContent='Add'; add.className='btn'; add.onclick=()=> addCard(id, card.name, 1);
+        const add = document.createElement('button'); add.textContent='Add'; add.className='btn'; add.onclick=()=> addCard(id, card.name, 1, card.images?.small || '');
         li.appendChild(img); li.appendChild(info); li.appendChild(add);
         results.appendChild(li);
       });
-    }catch(e){ results.innerHTML = `<li class="muted">Search error: ${e.message}</li>`; }
-  };
+    }catch(e){ results.innerHTML = `<li class=\"muted\">Search error: ${e.message}</li>`; }
+  }, 350);
+
+  byId('searchBtn').onclick = doSearch;
+  byId('searchName').addEventListener('input', doSearch);
 
   // ====== Start if slug present ======
   if (slug) { subscribe(); }
