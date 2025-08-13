@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Deck Box — Tap to Manage (Firebase)</title>
   <style>
     :root { --bg:#0b0f14; --card:#121922; --text:#ecf2f8; --muted:#9fb3c8; --accent:#57b2ff; }
     * { box-sizing: border-box; }
+
+    /* --- Mobile overflow + fit fix --- */
+    html, body { width:100%; max-width:100%; overflow-x:hidden; }
+    .row > * { min-width:0; }
+    .card, .wrap { width:100%; }
+    input, select, button { max-width:100%; }
+    .pager select { max-width:140px; }
+
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,#0b0f14,#0b0f14 60%,#0e141b); color:var(--text); }
     .wrap { max-width: 1040px; margin: 0 auto; padding: 20px; }
     .card { background: var(--card); border:1px solid #1d2633; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
@@ -74,61 +82,32 @@
     /* Anchor scroll nicer */
     #deckPanel { scroll-margin-top: 12px; }
 
-    /* ============== Mobile tuning ============== */
-    @media (max-width: 700px){
+    /* ===== Mobile tuning ===== */
+    @media (max-width:700px){
+      .wrap { padding:12px; }
       input, select, button { height:40px; padding:10px 12px; font-size:14px; }
-      .btn { line-height:18px; }
-      #toggleSearchViewBtn, #toggleViewBtn { max-width:100%; }
-      .row { gap:8px; }
-
-      /* Deck LIST: keep controls inside the box */
+      .btn { line-height:18px; white-space:normal; }
       #list.list > li { align-items:flex-start; }
-      #list.list .controls {
-        margin-left:0;
-        margin-top:8px;
-        flex-wrap:wrap;
-        width:100%;
-      }
-      #list.list .controls .btn {
-        flex:1 1 calc(33% - 8px);
-        min-width:98px;
-      }
+      #list.list .controls { margin-left:0; margin-top:8px; flex-wrap:wrap; width:100%; }
+      #list.list .controls .btn { flex:1 1 calc(33% - 8px); min-width:98px; }
       #list.list .thumb { width:72px; }
       #results.list > li { align-items:flex-start; }
       #results.list .btn { height:38px; }
     }
-
     /* Phones: 2 cols (very small) with top-crop */
-    @media (max-width: 419px){
-      #results.grid, #list.grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-      }
-      #results.grid > li, #list.grid > li { padding: 8px; }
-      #results.grid img,
-      #list.grid .thumb{
-        width: 100%;
-        height: 140px;
-        object-fit: cover;
-        object-position: top center;
-        border-radius: 10px;
+    @media (max-width:419px){
+      #results.grid, #list.grid { grid-template-columns: repeat(2, 1fr); gap:8px; }
+      #results.grid > li, #list.grid > li { padding:8px; }
+      #results.grid img, #list.grid .thumb{
+        width:100%; height:140px; object-fit:cover; object-position: top center; border-radius:10px;
       }
     }
-
     /* Small/medium phones: 3 cols with top-crop */
-    @media (min-width: 420px) and (max-width: 700px){
-      #results.grid, #list.grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-      }
-      #results.grid > li, #list.grid > li { padding: 8px; }
-      #results.grid img,
-      #list.grid .thumb{
-        width: 100%;
-        height: 150px;
-        object-fit: cover;
-        object-position: top center;
-        border-radius: 10px;
+    @media (min-width:420px) and (max-width:700px){
+      #results.grid, #list.grid { grid-template-columns: repeat(3, 1fr); gap:10px; }
+      #results.grid > li, #list.grid > li { padding:8px; }
+      #results.grid img, #list.grid .thumb{
+        width:100%; height:150px; object-fit:cover; object-position: top center; border-radius:10px;
       }
     }
   </style>
@@ -146,9 +125,7 @@
           <strong>No deck loaded.</strong>
           <div class="muted">Create a new deck (generates a secret link), or paste an existing deck ID.</div>
         </div>
-        <div class="row">
-          <button id="createBtn" class="btn primary">Create new deck</button>
-        </div>
+        <div class="row"><button id="createBtn" class="btn primary">Create new deck</button></div>
       </div>
       <div class="spacer"></div>
       <div class="row">
@@ -202,9 +179,7 @@
               <strong>Cards in Deck</strong>
               <span class="muted pill" id="countLabel">0 cards</span>
             </div>
-            <div class="row">
-              <button id="toggleViewBtn" class="btn">Switch to List View</button>
-            </div>
+            <div class="row"><button id="toggleViewBtn" class="btn">Switch to List View</button></div>
           </div>
           <div class="spacer"></div>
           <ul id="list" class="grid"></ul>
@@ -254,7 +229,7 @@
       </div>
     </div>
 
-    <div class="footer">v2.1 — Mobile grid (2–3 cols) • Top-crop images • Pagination • All previous fixes.</div>
+    <div class="footer">v2.1 — Mobile grid (2–3 cols) • Top-crop images • Pagination • Overflow fix.</div>
   </div>
 </div>
 
@@ -465,17 +440,9 @@
   }, 250);
 
   /* ========= Toast + count bump ========= */
-  const toast = byId('toast');
-  function showToast(msg){
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(()=> toast.classList.remove('show'), 900);
-  }
-  function bumpCount(){
-    countLabel.classList.remove('bump');
-    void countLabel.offsetWidth; // restart animation
-    countLabel.classList.add('bump');
-  }
+  const toast = document.createElement('div'); toast.id='toast'; document.body.appendChild(toast);
+  function showToast(msg){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=> toast.classList.remove('show'), 900); }
+  function bumpCount(){ countLabel.classList.remove('bump'); void countLabel.offsetWidth; countLabel.classList.add('bump'); }
 
   /* ========= Deck actions ========= */
   async function addCard(id, name, qty, image){
@@ -492,8 +459,7 @@
       const next = [...cards, { id, name:(name||'').trim(), qty, image: image||'', added_at: new Date().toISOString() }];
       await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
     }
-    bumpCount();
-    showToast(`${name || id} +${qty}`);
+    bumpCount(); showToast(`${name || id} +${qty}`);
     byId('cardId').value=''; byId('cardName').value=''; byId('qty').value='1';
   }
   async function changeQty(id, delta){
@@ -599,7 +565,6 @@
     return out;
   }
 
-  /* Search view toggle */
   const resultsEl = byId('results');
   const toggleSearchViewBtn = byId('toggleSearchViewBtn');
   let searchView = localStorage.getItem('search_view') || 'list';
@@ -616,7 +581,6 @@
     renderSearchPage(true);
   };
 
-  /* Pagination */
   const pager = byId('searchPager');
   const prevBtn = byId('prevPage');
   const nextBtn = byId('nextPage');
@@ -711,7 +675,6 @@
     renderSearchPage();
   }
 
-  /* Clear search + View deck */
   function clearSearch(){
     byId('searchName').value = '';
     resultsEl.innerHTML = '';
