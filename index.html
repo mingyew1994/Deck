@@ -1,333 +1,542 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deck Box</title>
-  <meta name="color-scheme" content="dark light"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deck Box — Tap to Manage (Firebase)</title>
   <style>
-    :root{
-      --bg:#0b1220; --panel:#111827; --muted:#9aa7b7; --edge:#243244; --text:#e6edf3;
-      --accent:#4ea1ff; --accent-2:#67f18d; --danger:#ff6b6b;
-      --pill:#1e2a39; --btn:#1a2740; --btn-hover:#223355;
+    :root { --bg:#0b0f14; --card:#121922; --text:#ecf2f8; --muted:#9fb3c8; --accent:#57b2ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,#0b0f14,#0b0f14 60%,#0e141b); color:var(--text); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 20px; }
+    .card { background: var(--card); border:1px solid #1d2633; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing:.2px; }
+    .sub { color: var(--muted); margin-bottom: 14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    input, textarea, button, select {
+      background:#0c1219; color:var(--text); border:1px solid #1d2633; border-radius:12px; padding:12px 14px; font-size:15px;
     }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-    .wrap{max-width:1100px;margin:28px auto;padding:0 16px}
-    .card{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:18px;box-shadow:0 2px 24px rgba(0,0,0,.25)}
-    h1{margin:0 0 10px 0;font-size:24px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    input,button,select{font:inherit}
-    input[type=text],input[type=number]{background:#0b1320;border:1px solid var(--edge);color:var(--text);padding:10px 12px;border-radius:10px;outline:none;min-width:0}
-    input[type=text]:focus, input[type=number]:focus{border-color:#38507c}
-    .btn{background:var(--btn);color:#fff;border:1px solid var(--edge);padding:9px 12px;border-radius:10px;cursor:pointer}
-    .btn:hover{background:var(--btn-hover)}
-    .btn.primary{background:#2563eb;border-color:#1d4ed8}
-    .btn.danger{background:#7a1e1e;border-color:#a52828}
-    .pill{background:var(--pill);border:1px solid var(--edge);color:var(--muted);padding:2px 8px;border-radius:999px;font-size:12px;margin-left:6px}
-    .muted{color:var(--muted)}
-    .spacer{height:10px}
-    .panel{margin-top:14px}
-    .hr{height:1px;background:var(--edge);margin:12px 0}
+    input, select, button { height:44px; }
+    input::placeholder { color:#5f748a; }
+    button { cursor:pointer; font-weight:600; }
+    .btn { background:#101925; }
+    .btn:hover { background:#132033; }
+    .btn.primary { background:var(--accent); color:#00121f; border-color:transparent; }
+    .btn.primary:hover { filter:brightness(1.05); }
+    ul { list-style:none; padding:0; margin:0; }
+    .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
+    .muted { color:var(--muted); font-size:13px; }
+    .spacer { height:6px; }
+    .footer { text-align:center; color:#6a7f93; font-size:12px; margin-top:14px; }
+    .hidden { display:none; }
 
-    /* search results + deck list */
-    ul{list-style:none;margin:0;padding:0}
-    .result,.deck-item{display:flex;gap:12px;align-items:center;border:1px solid var(--edge);background:#0b1320;border-radius:14px;padding:10px 12px}
-    .result img,.deck-item img{width:50px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--edge);background:#0b1220}
-    .grow{flex:1 1 auto;min-width:0}
-    .title{font-weight:600}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-    .list{display:flex;flex-direction:column;gap:12px}
+    /* Search results list */
+    .result { display:flex; gap:10px; align-items:center; }
+    .result img { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
 
-    .qty-btn{width:40px;height:34px}
-    .qty{min-width:36px;text-align:center;background:#0b1320;border:1px solid var(--edge);border-radius:8px;padding:6px 8px;margin:0 6px}
-    .topline{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-    .tiny{font-size:12px}
+    /* Deck views */
+    #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    #list.grid > li { display:flex; flex-direction:column; align-items:stretch; margin:0; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
+    #list.grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; margin:0 0 8px 0; border:1px solid #203040; background:#0b1320; }
+    #list.grid .title { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    #list.grid .controls { display:flex; gap:8px; margin-top:8px; }
 
-    @media (max-width:560px){
-      .result img,.deck-item img{width:44px;height:62px}
-    }
+    #list.list { display:block; }
+    #list.list > li { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
+    #list.list .thumb { width:80px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
+    #list.list .meta { display:flex; flex-direction:column; gap:4px; }
+    #list.list .title { font-weight:600; display:flex; align-items:center; gap:8px; }
+    #list.list .controls { display:flex; gap:8px; margin-left:auto; }
+
+    /* Top toolbar */
+    .toolbar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin: 10px 0 6px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <div class="topline">
-        <h1>Deck Box</h1>
-        <div class="tiny muted">v1.1 — local index + Firestore</div>
-      </div>
+<div class="wrap">
+  <div class="card">
+    <h1>Deck Box</h1>
+    <div class="sub">Deck: <span id="deckSlug" class="pill">loading…</span></div>
 
-      <!-- Deck header -->
+    <!-- No-deck panel -->
+    <div id="noDeck" class="card" style="margin-bottom:12px;">
+      <div class="row" style="align-items:center; justify-content:space-between; gap:12px;">
+        <div>
+          <strong>No deck loaded.</strong>
+          <div class="muted">Create a new deck (generates a secret link), or paste an existing deck ID.</div>
+        </div>
+        <div class="row">
+          <button id="createBtn" class="btn primary">Create new deck</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
       <div class="row">
-        <div class="muted">Deck:</div>
-        <div id="deckId" class="pill">—</div>
-        <button class="btn" id="copyDeck">Copy ID</button>
-        <div class="grow"></div>
-        <button class="btn primary" id="createDeck">Create new deck</button>
-      </div>
-
-      <div class="hr"></div>
-
-      <!-- Search controls -->
-      <div class="panel">
-        <div class="row" style="gap:8px;">
-          <input id="searchName" type="text" placeholder="Search Pokémon cards (e.g., Pikachu)" class="grow" />
-          <select id="viewMode" class="btn" title="View as">
-            <option value="grid" selected>Grid</option>
-            <option value="list">Rows</option>
-          </select>
-          <button class="btn" id="searchBtn">Search</button>
-        </div>
-        <div class="spacer"></div>
-        <div id="searchSummary" class="muted tiny"></div>
-        <div id="results" class="grid"></div>
-      </div>
-
-      <div class="hr"></div>
-
-      <!-- Deck list -->
-      <div class="panel">
-        <div class="topline">
-          <div class="title">Cards in Deck <span id="deckCount" class="pill">0 cards</span></div>
-          <button class="btn danger" id="clearDeck">Clear deck</button>
-        </div>
-        <div id="deckList" class="list"></div>
+        <input id="existingId" placeholder="Paste existing deck UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)" style="flex:1; min-width:260px;" />
+        <button id="openExistingBtn" class="btn">Open</button>
       </div>
     </div>
+
+    <div id="app" class="hidden">
+      <div class="stack" style="display:flex; flex-direction:column; gap:12px;">
+
+        <!-- Manual add / qty -->
+        <div class="row">
+          <input id="cardId" placeholder="Card ID (e.g., sv4-123 or full tcg.id)" style="flex:2; min-width:140px" />
+          <input id="cardName" placeholder="Name (optional)" style="flex:3; min-width:160px" />
+          <input id="qty" type="number" min="1" value="1" style="width:90px" title="Quantity" />
+        </div>
+        <div class="row">
+          <button id="addBtn" class="btn primary">Add / Increase</button>
+          <button id="decreaseBtn" class="btn">Decrease</button>
+          <button id="removeBtn" class="btn">Remove card</button>
+          <button id="checkBtn" class="btn">Check in deck?</button>
+        </div>
+
+        <!-- Search (LOCAL INDEX) -->
+        <div class="card">
+          <strong>Search Pokémon cards</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <input id="searchName" placeholder="Type card name (e.g., Charizard)" style="flex:1; min-width:240px" />
+            <button id="searchBtn" class="btn">Search</button>
+          </div>
+          <div class="spacer"></div>
+          <ul id="results"></ul>
+        </div>
+
+        <!-- Deck -->
+        <div class="card">
+          <div class="toolbar">
+            <div class="row" style="gap:8px; align-items:center;">
+              <strong>Cards in Deck</strong>
+              <span class="muted" id="countLabel">0 cards</span>
+            </div>
+            <div class="row">
+              <button id="toggleViewBtn" class="btn">Switch to List View</button>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <ul id="list" class="grid"></ul>
+        </div>
+
+      </div>
+
+      <!-- Right column -->
+      <div class="stack" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <strong>Deck Link</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <input id="deckUrl" readonly style="flex:1" />
+            <button id="copyUrlBtn" class="btn">Copy URL</button>
+          </div>
+          <div class="spacer"></div>
+          <div class="muted">Write this URL to your NFC tag. Anyone with this link can view and edit this deck.</div>
+        </div>
+
+        <div class="card">
+          <strong>Import / Export</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <button id="exportBtn" class="btn">Export JSON</button>
+            <button id="copyBtn" class="btn">Copy</button>
+            <button id="downloadBtn" class="btn">Download</button>
+          </div>
+          <div class="spacer"></div>
+          <textarea id="jsonArea" rows="8" placeholder='Paste JSON here to import'></textarea>
+          <div class="spacer"></div>
+          <div class="row">
+            <button id="importBtn" class="btn">Import JSON</button>
+            <button id="clearBtn" class="btn">Clear deck</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <strong>Notes</strong>
+          <div class="spacer"></div>
+          <ul class="muted">
+            <li>Search runs only on click/Enter and cancels previous renders.</li>
+            <li>Results & deck show thumbnails (from local index, with API backfill if missing).</li>
+            <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">v1.6 — Local index search • Click/Enter only • Cancelable render • Thumbnails • Grid/List toggle.</div>
   </div>
+</div>
 
-  <!-- Firebase (modular CDN) -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+<!-- Firebase (Modular SDK) -->
+<script type="module">
+  /* ==========================
+     Firebase setup
+  ========================== */
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-    // ===== 1) Firebase config (your project) =====
-    const firebaseConfig = {
-      apiKey: "AIzaSyCxmKPfglneWP0PbzFumT9Az24M9k4ZuJI",
-      authDomain: "decksmiths-2025.firebaseapp.com",
-      projectId: "decksmiths-2025",
-      storageBucket: "decksmiths-2025.firebasestorage.app",
-      messagingSenderId: "487112789478",
-      appId: "1:487112789478:web:5b8be16aea20c90a199a27",
-      measurementId: "G-GFBVJ4BGDT"
-    };
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+  const firebaseConfig = {
+    apiKey: "AIzaSyCxmKPfglneWP0PbzFumT9Az24M9k4ZuJI",
+    authDomain: "decksmiths-2025.firebaseapp.com",
+    projectId: "decksmiths-2025",
+    storageBucket: "decksmiths-2025.firebasestorage.app",
+    messagingSenderId: "487112789478",
+    appId: "1:487112789478:web:5b8be16aea20c90a199a27",
+    measurementId: "G-GFBVJ4BGDT"
+  };
 
-    // ===== 2) Helpers =====
-    const $ = sel => document.querySelector(sel);
-    const byId = id => document.getElementById(id);
-    const status = (msg) => byId('searchSummary').textContent = msg || '';
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  try { enableIndexedDbPersistence(db); } catch (_) {}
 
-    const LOCAL_INDEX_URL = './cards.min.json';
-    let NAME_INDEX = []; // { n, id, img }
-    let INDEX_READY = false;
-    let renderAbort = { aborted:false }; // simple cancel token for renders
-    let currentDeckId = null;
-    let unsub = null; // Firestore live sub
-    let liveDeck = { cards:{} }; // shape: {cards: { [id]: {n,img,qty}}}
+  /* ==========================
+     DOM helpers & state
+  ========================== */
+  const $ = sel => document.querySelector(sel);
+  const byId = id => document.getElementById(id);
+  const slugSpan = byId('deckSlug');
+  const deckUrlInput = byId('deckUrl');
 
-    function saveCache(key, obj){ localStorage.setItem(key, JSON.stringify(obj)); }
-    function readCache(key, fallback){ try{ return JSON.parse(localStorage.getItem(key)||'null') ?? fallback } catch { return fallback } }
-
-    async function loadNameIndex(){
-      // try cache first
-      const cached = readCache('ptcg:nameindex', null);
-      if (cached?.length) { NAME_INDEX = cached; INDEX_READY = true; return; }
-      const res = await fetch(LOCAL_INDEX_URL, { cache: 'no-store' });
-      NAME_INDEX = await res.json();
-      saveCache('ptcg:nameindex', NAME_INDEX);
-      INDEX_READY = true;
+  const params = new URLSearchParams(location.search);
+  let slug = (params.get('deck')||'').trim();
+  function setSlug(newSlug, push=true){
+    slug = newSlug;
+    slugSpan.textContent = slug || '—';
+    if (slug) {
+      const url = `${location.origin}${location.pathname}?deck=${encodeURIComponent(slug)}`;
+      deckUrlInput.value = url;
+      if (push) history.replaceState(null, '', url);
+      $('#noDeck').classList.add('hidden');
+      $('#app').classList.remove('hidden');
+    } else {
+      $('#noDeck').classList.remove('hidden');
+      $('#app').classList.add('hidden');
     }
+  }
+  setSlug(slug, false);
 
-    function localSearchByName(query, limit=100){
-      const q = query.trim().toLowerCase();
-      if (!q) return [];
-      const out = [];
-      for (const row of NAME_INDEX) {
-        if (row.n.toLowerCase().includes(q)) {
-          out.push(row);
-          if (out.length >= limit) break;
-        }
+  const deckRef = () => doc(db, 'decks', slug);
+  let unsub = null;
+  let currentDeck = null;
+
+  async function ensureDeckExists(){
+    if (!slug) return;
+    const snap = await getDoc(deckRef());
+    if (!snap.exists()) {
+      await setDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
+    }
+  }
+  async function subscribe(){
+    if (!slug) return;
+    if (unsub) { unsub(); unsub=null; }
+    await ensureDeckExists();
+    unsub = onSnapshot(deckRef(), (snap)=>{
+      if (snap.exists()) {
+        currentDeck = snap.data();
+        render();
       }
-      return out;
-    }
-
-    // ===== 3) Search UI (click/Enter only, cancelable render) =====
-    async function doSearch(){
-      const q = byId('searchName').value.trim();
-      const resultsEl = byId('results');
-      status('');
-      resultsEl.innerHTML = '';
-      if (!q){ status('Type a card name and press Search.'); return; }
-
-      if (!INDEX_READY){
-        status('Loading local index…');
-        try{ await loadNameIndex(); } catch(e){ status('Failed to load index.'); return; }
-      }
-
-      const rows = localSearchByName(q, 500);
-      status(`${rows.length} result(s) for “${q}”`);
-      // cancel any in-flight render
-      renderAbort.aborted = true;
-      renderAbort = { aborted:false };
-
-      renderResults(rows, resultsEl, renderAbort);
-    }
-
-    function renderResults(rows, container, token){
-      container.className = byId('viewMode').value === 'grid' ? 'grid' : 'list';
-      container.innerHTML = '';
-      const CHUNK = 40;
-      let i = 0;
-
-      function chunk(){
-        if (token.aborted) return;
-        const frag = document.createDocumentFragment();
-        for (let c=0; c<CHUNK && i<rows.length; c++, i++){
-          const r = rows[i];
-          const li = document.createElement('div');
-          li.className = 'result';
-          const img = document.createElement('img');
-          img.src = r.img || '';
-          img.alt = r.n;
-          img.loading = 'lazy';
-          img.onerror = () => { img.style.display='none'; };
-
-          const info = document.createElement('div'); info.className='grow';
-          info.innerHTML = `<div class="title">${r.n}<span class="pill">${r.id}</span></div>`;
-
-          const add = document.createElement('button'); add.className='btn'; add.textContent='Add';
-          add.onclick = () => addToDeck(r.id, r.n, r.img);
-
-          li.append(img, info, add);
-          frag.appendChild(li);
-        }
-        container.appendChild(frag);
-        if (i < rows.length) requestAnimationFrame(chunk);
-      }
-      requestAnimationFrame(chunk);
-    }
-
-    // ===== 4) Deck storage (Firestore) =====
-    function uuid(){ return (crypto.randomUUID && crypto.randomUUID()) || 'xxxxxxxxyxxx4xxxyyxxxxxx'.replace(/[xy]/g,c=>((Math.random()*16)|0).toString(16)); }
-
-    async function ensureDeck(id){
-      const ref = doc(db, 'decks', id);
-      const snap = await getDoc(ref);
-      if (!snap.exists()){
-        await setDoc(ref, { createdAt: Date.now(), cards:{} });
-      }
-      return ref;
-    }
-
-    function mountDeck(id){
-      currentDeckId = id;
-      byId('deckId').textContent = id;
-      byId('deckId').title = 'Deck UUID';
-      if (unsub) unsub();
-      const ref = doc(db, 'decks', id);
-      unsub = onSnapshot(ref, s => {
-        const data = s.data() || {cards:{}};
-        liveDeck = data;
-        renderDeck();
-      });
-      history.replaceState(null,'',`#${id}`);
-    }
-
-    async function createDeck(){
-      const id = uuid();
-      await ensureDeck(id);
-      mountDeck(id);
-    }
-
-    function renderDeck(){
-      const list = byId('deckList'); list.innerHTML='';
-      const cards = liveDeck.cards || {};
-      const entries = Object.entries(cards).sort((a,b)=> (a[1].n||'').localeCompare(b[1].n||''));
-      let total = 0;
-
-      for (const [id, v] of entries){
-        const li = document.createElement('div'); li.className='deck-item';
-        const img = document.createElement('img'); img.src = v.img || ''; img.alt = v.n || id; img.onerror=()=>{img.style.display='none';};
-        const info = document.createElement('div'); info.className='grow';
-        info.innerHTML = `<div class="title">${v.n || id}<span class="pill">${id}</span></div>`;
-        const qty = document.createElement('span'); qty.className='qty'; qty.textContent = v.qty || 1;
-
-        const plus = document.createElement('button'); plus.className='btn qty-btn'; plus.textContent='+1';
-        plus.onclick = () => changeQty(id, +1);
-        const minus = document.createElement('button'); minus.className='btn qty-btn'; minus.textContent='-1';
-        minus.onclick = () => changeQty(id, -1);
-        const rm = document.createElement('button'); rm.className='btn danger'; rm.textContent='Remove';
-        rm.onclick = () => changeQty(id, 'remove');
-
-        li.append(img, info, minus, qty, plus, rm);
-        list.appendChild(li);
-        total += (v.qty || 1);
-      }
-      byId('deckCount').textContent = `${entries.length} cards • ${total} total`;
-    }
-
-    async function addToDeck(id, name, img){
-      if (!currentDeckId){ await createDeck(); }
-      const cards = structuredClone(liveDeck.cards || {});
-      const cur = cards[id] || { n:name, img:img || '', qty:0 };
-      cur.n = name || cur.n;
-      cur.img = img || cur.img || '';
-      cur.qty = (cur.qty||0) + 1;
-      cards[id] = cur;
-      await updateDoc(doc(db,'decks', currentDeckId), { cards });
-    }
-
-    async function changeQty(id, delta){
-      const cards = structuredClone(liveDeck.cards || {});
-      const cur = cards[id]; if (!cur) return;
-      if (delta === 'remove'){ delete cards[id]; }
-      else {
-        cur.qty = Math.max(0, (cur.qty||0) + delta);
-        if (cur.qty === 0) delete cards[id];
-        else cards[id] = cur;
-      }
-      await updateDoc(doc(db,'decks', currentDeckId), { cards });
-    }
-
-    async function clearDeck(){
-      if (!currentDeckId) return;
-      await updateDoc(doc(db,'decks', currentDeckId), { cards:{} });
-    }
-
-    // ===== 5) Wire up UI =====
-    byId('searchBtn').addEventListener('click', doSearch);
-    byId('searchName').addEventListener('keydown', e => {
-      if (e.key === 'Enter'){ e.preventDefault(); doSearch(); }
     });
-    byId('viewMode').addEventListener('change', () => {
-      // reflow existing results container class
-      const r = byId('results');
-      r.className = byId('viewMode').value === 'grid' ? 'grid' : 'list';
-    });
-    byId('createDeck').addEventListener('click', createDeck);
-    byId('clearDeck').addEventListener('click', clearDeck);
-    byId('copyDeck').addEventListener('click', async ()=>{
-      if (!currentDeckId) return;
-      await navigator.clipboard.writeText(currentDeckId);
-      byId('copyDeck').textContent = 'Copied!';
-      setTimeout(()=> byId('copyDeck').textContent='Copy ID', 900);
+  }
+
+  function normalizeId(s){ return (s||'').trim().toLowerCase(); }
+  function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
+  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
+
+  /* ==========================
+     Grid/List toggle
+  ========================== */
+  const listEl = byId('list');
+  const toggleBtn = byId('toggleViewBtn');
+  let viewMode = localStorage.getItem('deck_view') || 'grid';
+  function applyView(){
+    listEl.classList.remove('grid','list');
+    listEl.classList.add(viewMode);
+    toggleBtn.textContent = viewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View';
+  }
+  applyView();
+  toggleBtn.onclick = () => {
+    viewMode = (viewMode === 'grid') ? 'list' : 'grid';
+    localStorage.setItem('deck_view', viewMode);
+    applyView();
+    render();
+  };
+
+  /* ==========================
+     Render deck
+  ========================== */
+  function render(){
+    const list = byId('list');
+    list.innerHTML = '';
+    const cards = (currentDeck?.cards)||[];
+    const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
+    byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
+
+    cards.forEach(c=>{
+      const li = document.createElement('li');
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = c.name || c.id;
+      if (c.image) img.src = c.image; else img.style.display='none';
+      img.onerror = ()=>{ img.style.display='none'; };
+
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.innerHTML = viewMode === 'grid'
+        ? `<span><strong>${escapeHtml(c.name||c.id)}</strong>${c.name?` <span class="muted">(${escapeHtml(c.id)})</span>`:''}</span> <span class="pill">x${c.qty||1}</span>`
+        : `<strong>${escapeHtml(c.name||c.id)}</strong>${c.name?` <span class="muted">(${escapeHtml(c.id)})</span>`:''} <span class="pill">x${c.qty||1}</span>`;
+
+      const added = document.createElement('div');
+      added.className = 'muted';
+      added.textContent = `Added ${new Date(c.added_at||Date.now()).toLocaleString()}`;
+
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+      const inc = document.createElement('button'); inc.textContent = '+1'; inc.className='btn'; inc.onclick=()=> changeQty(c.id, +1);
+      const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.onclick=()=> changeQty(c.id, -1);
+      const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.onclick = ()=> removeCard(c.id);
+      controls.appendChild(inc); controls.appendChild(dec); controls.appendChild(del);
+
+      if (viewMode === 'grid') {
+        li.appendChild(img); li.appendChild(title); li.appendChild(added); li.appendChild(controls);
+      } else {
+        img.classList.add('thumb');
+        li.appendChild(img); meta.appendChild(title); meta.appendChild(added); li.appendChild(meta); li.appendChild(controls);
+      }
+      list.appendChild(li);
     });
 
-    // boot
-    (async () => {
-      // load index in the background (first search will await if not ready)
-      loadNameIndex().catch(()=>{});
-      // deck from URL hash or create none (user can click Create)
-      const hash = (location.hash||'').replace('#','').trim();
-      if (hash){
-        await ensureDeck(hash);
-        mountDeck(hash);
+    debouncedBackfill();
+  }
+
+  /* ==========================
+     Image backfill helpers
+  ========================== */
+  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826'; // optional, for backfill/API lookups
+  const idCache = new Map();
+  const imageCache = new Map();
+  function parseSetNumFromId(id){
+    const m = String(id||'').toLowerCase().match(/^([a-z0-9]+)-([a-z0-9]+)$/);
+    return m ? { set:m[1], num:m[2] } : null;
+  }
+  const cdnUrl = (set,num)=>`https://images.pokemontcg.io/${set}/${num}.png`;
+  async function urlExists(url){ try { const r = await fetch(url, { method:'HEAD' }); return r.ok; } catch { return false; } }
+  async function fetchCardById(id){
+    const norm = (id||'').toLowerCase();
+    if (idCache.has(norm)) return idCache.get(norm);
+    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+    const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(norm)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const card = j.data || null; if(card) idCache.set(norm, card); return card;
+  }
+  async function resolveImageForCardId(id){
+    const norm = (id||'').toLowerCase();
+    if (imageCache.has(norm)) return imageCache.get(norm);
+    const viaId = await fetchCardById(norm);
+    if (viaId?.images?.small){ imageCache.set(norm, viaId.images.small); return viaId.images.small; }
+    const sn = parseSetNumFromId(norm);
+    if (sn){
+      const fast = cdnUrl(sn.set, sn.num);
+      if (await urlExists(fast)) { imageCache.set(norm, fast); return fast; }
+      const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+      const q = encodeURIComponent(`set.id:${sn.set} number:${sn.num}`);
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`, { headers });
+      if (r.ok){ const j = await r.json(); const c = (j.data||[])[0]; if (c?.images?.small){ imageCache.set(norm, c.images.small); return c.images.small; } }
+    }
+    imageCache.set(norm, ''); return '';
+  }
+  function debounce(fn, wait=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
+  const debouncedBackfill = debounce(async ()=>{
+    const cards = (currentDeck?.cards)||[];
+    const next = [...cards];
+    let changed = false;
+    for (let i=0;i<next.length;i++){
+      if (!next[i].image){
+        const img = await resolveImageForCardId(next[i].id);
+        if (img){ next[i] = { ...next[i], image: img }; changed = true; }
       }
-      // small UX hint
-      status('Type a name and press Search. Toggle Grid/Rows on the right.');
-    })();
-  </script>
+    }
+    if (changed){ await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() }); }
+  }, 250);
+
+  /* ==========================
+     Deck actions
+  ========================== */
+  async function addCard(id, name, qty, image){
+    id = normalizeId(id);
+    qty = Math.max(1, Number(qty||1));
+    if(!id){ alert('Please enter a Card ID (e.g., sv4-123).'); return; }
+    const cards = (currentDeck?.cards)||[];
+    const idx = cards.findIndex(c=>c.id===id);
+    if (idx>=0){
+      const next = [...cards];
+      next[idx] = { ...next[idx], qty: (Number(next[idx].qty||1) + qty), image: next[idx].image || image || '' };
+      await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    } else {
+      const next = [...cards, { id, name:(name||'').trim(), qty, image: image||'', added_at: new Date().toISOString() }];
+      await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    }
+    byId('cardId').value=''; byId('cardName').value=''; byId('qty').value='1';
+  }
+  async function changeQty(id, delta){
+    id = normalizeId(id);
+    const cards = (currentDeck?.cards)||[];
+    const idx = cards.findIndex(c=>c.id===id);
+    if (idx<0) return;
+    const next = [...cards];
+    const newQty = Math.max(0, Number(next[idx].qty||1) + delta);
+    if (newQty===0){ next.splice(idx,1); }
+    else { next[idx] = { ...next[idx], qty:newQty }; }
+    await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+  }
+  async function removeCard(id){
+    id = normalizeId(id || byId('cardId').value);
+    const cards = (currentDeck?.cards)||[];
+    const next = cards.filter(c=>c.id!==id);
+    await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+  }
+  async function checkCard(id){
+    id = normalizeId(id || byId('cardId').value);
+    if(!id){ alert('Enter an ID to check.'); return; }
+    const has = ((currentDeck?.cards)||[]).some(c=>c.id===id);
+    alert(has ? `✅ Yes, ${id} is in this deck.` : `❌ No, ${id} is not in this deck.`);
+  }
+
+  function exportJson(){
+    const data = { deck: slug, cards: (currentDeck?.cards)||[], updated_at: currentDeck?.updated_at || null };
+    return JSON.stringify(data, null, 2);
+  }
+  function download(filename, text){
+    const a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
+    a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  /* ==========================
+     Wire up buttons
+  ========================== */
+  byId('createBtn').onclick = async ()=>{
+    const id = crypto.randomUUID();
+    setSlug(id);
+    await setDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
+    await subscribe();
+  };
+  byId('openExistingBtn').onclick = ()=>{
+    const id = byId('existingId').value.trim();
+    if (!id) return alert('Paste a deck UUID first.');
+    setSlug(id);
+    subscribe();
+  };
+  byId('addBtn').onclick = async () => {
+    const id = byId('cardId').value;
+    const name = byId('cardName').value;
+    const qty = byId('qty').value;
+    // try to prefill image (from CDN/API)
+    const img = await resolveImageForCardId(id);
+    await addCard(id, name || '', qty, img);
+  };
+  byId('decreaseBtn').onclick = () => changeQty(byId('cardId').value, -1);
+  byId('removeBtn').onclick = () => removeCard(byId('cardId').value);
+  byId('checkBtn').onclick = () => checkCard(byId('cardId').value);
+
+  byId('exportBtn').onclick = () => { byId('jsonArea').value = exportJson(); };
+  byId('copyBtn').onclick = async () => { const t = exportJson(); byId('jsonArea').value=t; try{ await navigator.clipboard.writeText(t); alert('Copied!'); }catch{} };
+  byId('downloadBtn').onclick = () => download(`deck-${slug}.json`, exportJson());
+  byId('importBtn').onclick = async () => {
+    try{
+      const data = JSON.parse(byId('jsonArea').value);
+      if(!data.cards || !Array.isArray(data.cards)) throw new Error('Invalid JSON: missing "cards" array.');
+      await updateDoc(deckRef(), { cards: data.cards.map(c=>({ id: normalizeId(c.id), name:(c.name||'').trim(), qty: Math.max(1, Number(c.qty||1)), image: c.image||'', added_at: c.added_at || new Date().toISOString() })), updated_at: serverTimestamp() });
+      alert('Imported!');
+    }catch(e){ alert('Import failed: ' + e.message); }
+  };
+  byId('clearBtn').onclick = async () => {
+    if(confirm('Clear all cards in this deck?')){
+      await updateDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
+    }
+  };
+  byId('copyUrlBtn').onclick = async () => {
+    try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
+  };
+
+  /* ==========================
+     LOCAL index search (instant)
+  ========================== */
+  const LOCAL_INDEX_URL = './cards.min.json';
+  let NAME_INDEX = []; // [{n,id,img}]
+  let indexReady = false;
+
+  async function loadNameIndex(){
+    if (indexReady) return;
+    // cache in localStorage
+    const cached = localStorage.getItem('ptcg:nameindex');
+    if (cached){
+      try { NAME_INDEX = JSON.parse(cached); indexReady = true; return; } catch {}
+    }
+    const res = await fetch(LOCAL_INDEX_URL, { cache:'no-store' });
+    NAME_INDEX = await res.json();
+    localStorage.setItem('ptcg:nameindex', JSON.stringify(NAME_INDEX));
+    indexReady = true;
+  }
+
+  function localSearchByName(q, limit=100){
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    const out = [];
+    for (const r of NAME_INDEX){
+      if (r.n.toLowerCase().includes(q)){
+        out.push(r);
+        if (out.length >= limit) break;
+      }
+    }
+    return out;
+  }
+
+  // cancelable render
+  let renderAbort = { aborted:false };
+  function renderResults(rows, container, token){
+    container.innerHTML = '';
+    if (rows.length === 0){
+      container.innerHTML = '<li class="muted">No matches.</li>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const row of rows){
+      if (token.aborted) return;
+      const li = document.createElement('li'); li.className='result';
+      const img = document.createElement('img'); img.src=row.img||''; img.alt=row.n; img.loading='lazy'; img.onerror=()=>{img.style.display='none';};
+      const info = document.createElement('div');
+      info.innerHTML = `<div><strong>${row.n}</strong> <span class="pill">${row.id}</span></div>`;
+      const add = document.createElement('button'); add.textContent='Add'; add.className='btn';
+      add.onclick = () => addCard(row.id, row.n, 1, row.img || '');
+      li.append(img, info, add);
+      frag.appendChild(li);
+    }
+    container.appendChild(frag);
+  }
+
+  async function doSearch(){
+    const name = byId('searchName').value.trim();
+    const results = byId('results');
+    if (!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
+
+    results.innerHTML = '<li class="muted">Loading index…</li>';
+    try { await loadNameIndex(); } catch { results.innerHTML='<li class="muted">Failed to load index.</li>'; return; }
+
+    const rows = localSearchByName(name, 300);
+    renderAbort.aborted = true; // cancel any previous render
+    renderAbort = { aborted:false };
+    renderResults(rows, results, renderAbort);
+  }
+
+  byId('searchBtn').onclick = doSearch;
+  byId('searchName').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); doSearch(); } });
+
+  // boot
+  if (slug) { subscribe(); }
+</script>
 </body>
 </html>
