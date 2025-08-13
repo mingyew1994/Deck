@@ -13,16 +13,18 @@
     h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing:.2px; }
     .sub { color: var(--muted); margin-bottom: 14px; }
     .row { display:flex; gap:10px; flex-wrap:wrap; }
+
     input, textarea, button, select {
       background:#0c1219; color:var(--text); border:1px solid #1d2633; border-radius:12px; padding:12px 14px; font-size:15px;
     }
-    input, select, button { height:44px; }
+    input, select, button { height:44px; line-height:20px; }
     input::placeholder { color:#5f748a; }
-    button { cursor:pointer; font-weight:600; }
+    button { cursor:pointer; font-weight:600; white-space:nowrap; }
     .btn { background:#101925; }
     .btn:hover { background:#132033; }
     .btn.primary { background:var(--accent); color:#00121f; border-color:transparent; }
     .btn.primary:hover { filter:brightness(1.05); }
+
     ul { list-style:none; padding:0; margin:0; }
     .pill { font:600 12px/1.6 system-ui; padding:4px 8px; border-radius:999px; background:#0c1924; border:1px solid #223246; color:#9cc9f5; }
     .muted { color:var(--muted); font-size:13px; }
@@ -35,29 +37,29 @@
     #results.list > li { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
     #results.list img { width:72px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
 
-    /* Search results: GRID */
+    /* Search results: GRID (desktop defaults) */
     #results.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
     #results.grid > li { display:flex; flex-direction:column; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
-    #results.grid img { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; border:1px solid #203040; background:#0b1320; }
+    #results.grid img { width:100%; height:auto; max-height:260px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; }
     #results.grid .info { margin:8px 0; }
 
     /* Pagination */
-    .pager { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:10px; }
+    .pager { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:10px; flex-wrap:wrap; }
     .pager .btn { height:36px; padding:8px 12px; }
     .pager select { height:36px; }
 
-    /* Deck views */
+    /* Deck views (desktop defaults) */
     #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
     #list.grid > li { display:flex; flex-direction:column; align-items:stretch; margin:0; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
-    #list.grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; margin:0 0 8px 0; border:1px solid #203040; background:#0b1320; }
+    #list.grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; object-position:center; border-radius:12px; margin:0 0 8px 0; border:1px solid #203040; background:#0b1320; }
     #list.grid .title { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
     #list.grid .controls { display:flex; gap:8px; margin-top:8px; }
 
     #list.list { display:block; }
     #list.list > li { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
     #list.list .thumb { width:80px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
-    #list.list .meta { display:flex; flex-direction:column; gap:4px; }
-    #list.list .title { font-weight:600; display:flex; align-items:center; gap:8px; }
+    #list.list .meta { display:flex; flex-direction:column; gap:4px; min-width:0; }
+    #list.list .title { font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     #list.list .controls { display:flex; gap:8px; margin-left:auto; }
 
     /* Top toolbar */
@@ -69,8 +71,66 @@
     @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.12)} 100%{transform:scale(1)} }
     .bump { animation:bump .35s ease; }
 
-    /* Make anchor scroll nicer */
+    /* Anchor scroll nicer */
     #deckPanel { scroll-margin-top: 12px; }
+
+    /* ============== Mobile tuning ============== */
+    @media (max-width: 700px){
+      input, select, button { height:40px; padding:10px 12px; font-size:14px; }
+      .btn { line-height:18px; }
+      #toggleSearchViewBtn, #toggleViewBtn { max-width:100%; }
+      .row { gap:8px; }
+
+      /* Deck LIST: keep controls inside the box */
+      #list.list > li { align-items:flex-start; }
+      #list.list .controls {
+        margin-left:0;
+        margin-top:8px;
+        flex-wrap:wrap;
+        width:100%;
+      }
+      #list.list .controls .btn {
+        flex:1 1 calc(33% - 8px);
+        min-width:98px;
+      }
+      #list.list .thumb { width:72px; }
+      #results.list > li { align-items:flex-start; }
+      #results.list .btn { height:38px; }
+    }
+
+    /* Phones: 2 cols (very small) with top-crop */
+    @media (max-width: 419px){
+      #results.grid, #list.grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      #results.grid > li, #list.grid > li { padding: 8px; }
+      #results.grid img,
+      #list.grid .thumb{
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        object-position: top center;
+        border-radius: 10px;
+      }
+    }
+
+    /* Small/medium phones: 3 cols with top-crop */
+    @media (min-width: 420px) and (max-width: 700px){
+      #results.grid, #list.grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      #results.grid > li, #list.grid > li { padding: 8px; }
+      #results.grid img,
+      #list.grid .thumb{
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        object-position: top center;
+        border-radius: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -186,22 +246,36 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Search uses a local index with 12 results per page (faster + lighter).</li>
-            <li>“View deck” clears results to avoid layout shifts before scrolling.</li>
+            <li>Mobile-friendly grid (2–3 cols) with top-crop images.</li>
+            <li>Search pagination (12/page). “View deck” clears results first.</li>
             <li>No login; the deck link is the “key”.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.9 — Search pagination (12/page) • Better “View deck” scroll • Search Grid/List toggle • Toast + count bump • Local index search.</div>
+    <div class="footer">v2.1 — Mobile grid (2–3 cols) • Top-crop images • Pagination • All previous fixes.</div>
   </div>
 </div>
 
-<!-- Little toast -->
-<div id="toast"></div>
+<!-- Tiny error overlay so blank screens show why -->
+<script>
+  window.addEventListener('error', e => {
+    const msg = (e.error && e.error.stack) ? e.error.stack : (e.message || 'Unknown error');
+    const pre = document.createElement('pre');
+    pre.textContent = 'JS error: ' + msg;
+    pre.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;background:#2a1f1f;color:#ffd7d7;padding:10px;border:1px solid #7a4;z-index:99999;max-height:40vh;overflow:auto;border-radius:8px';
+    document.body.appendChild(pre);
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const pre = document.createElement('pre');
+    pre.textContent = 'Promise rejection: ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
+    pre.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;background:#2a1f1f;color:#ffd7d7;padding:10px;border:1px solid #7a4;z-index:99999;max-height:40vh;overflow:auto;border-radius:8px';
+    document.body.appendChild(pre);
+  });
+</script>
 
-<!-- Firebase (Modular SDK) + App -->
+<!-- Firebase + App -->
 <script type="module">
   /* ========= Firebase ========= */
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
@@ -501,7 +575,7 @@
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch {}
   };
 
-  /* ========= LOCAL index search (instant) + view toggle + pagination ========= */
+  /* ========= LOCAL index search (instant) + toggle + pagination ========= */
   const LOCAL_INDEX_URL = './cards.min.json';
   let NAME_INDEX = [];
   let indexReady = false;
@@ -525,10 +599,10 @@
     return out;
   }
 
-  // search view toggle (persisted)
+  /* Search view toggle */
   const resultsEl = byId('results');
   const toggleSearchViewBtn = byId('toggleSearchViewBtn');
-  let searchView = localStorage.getItem('search_view') || 'list'; // 'list' | 'grid'
+  let searchView = localStorage.getItem('search_view') || 'list';
   function applySearchView(){
     resultsEl.classList.remove('list','grid');
     resultsEl.classList.add(searchView);
@@ -539,10 +613,10 @@
     searchView = (searchView === 'grid') ? 'list' : 'grid';
     localStorage.setItem('search_view', searchView);
     applySearchView();
-    renderSearchPage(); // re-render current page with new layout
+    renderSearchPage(true);
   };
 
-  // pagination state
+  /* Pagination */
   const pager = byId('searchPager');
   const prevBtn = byId('prevPage');
   const nextBtn = byId('nextPage');
@@ -588,7 +662,6 @@
         setTimeout(()=>{ add.disabled=false; add.textContent=old; }, 700);
       };
 
-      // same structure works for both list & grid
       li.append(img, info, add);
       frag.appendChild(li);
     }
@@ -596,19 +669,16 @@
   }
 
   function renderSearchPage(keepTop=false){
-    // slice rows for current page
     const tPages = totalPages();
     if (page > tPages) page = tPages;
     const start = (page-1)*PAGE_SIZE;
     const end = start + PAGE_SIZE;
     const slice = searchRows.slice(start, end);
 
-    // update pager UI
     if (searchRows.length === 0){
       pager.classList.add('hidden');
     } else {
       pager.classList.remove('hidden');
-      // rebuild select only if needed
       if (pageSel.options.length !== tPages){
         pageSel.innerHTML = '';
         for (let i=1;i<=tPages;i++){
@@ -624,11 +694,9 @@
       nextBtn.disabled = page>=tPages;
     }
 
-    // render
     renderAbort.aborted = true; renderAbort = { aborted:false };
     renderResults(slice, resultsEl, renderAbort);
 
-    // optionally keep the results top in view when paging
     if (!keepTop) return;
     resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
   }
@@ -643,17 +711,15 @@
     renderSearchPage();
   }
 
-  // Clear search + View deck (improved)
+  /* Clear search + View deck */
   function clearSearch(){
     byId('searchName').value = '';
     resultsEl.innerHTML = '';
     pager.classList.add('hidden');
   }
   function viewDeck(){
-    // clear results first to avoid layout shifts while images load
     clearSearch();
     deckPanel.scrollIntoView({ behavior:'smooth', block:'start' });
-    // nudge again shortly after in case something still adjusted layout
     setTimeout(()=> deckPanel.scrollIntoView({ behavior:'smooth', block:'start' }), 250);
   }
 
@@ -662,7 +728,7 @@
   byId('clearSearchBtn').onclick = clearSearch;
   byId('viewDeckBtn').onclick = viewDeck;
 
-  // boot
+  /* Boot */
   if (slug) { subscribe(); }
 </script>
 </body>
