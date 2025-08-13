@@ -50,6 +50,12 @@
 
     /* Top toolbar */
     .toolbar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin: 10px 0 6px; }
+
+    /* Toast + bump animation */
+    #toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#0f1a26; border:1px solid #203244; padding:10px 14px; border-radius:12px; font-weight:600; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:9999; }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); }
+    @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.12)} 100%{transform:scale(1)} }
+    .bump { animation:bump .35s ease; }
   </style>
 </head>
 <body>
@@ -99,17 +105,19 @@
           <div class="row">
             <input id="searchName" placeholder="Type card name (e.g., Charizard)" style="flex:1; min-width:240px" />
             <button id="searchBtn" class="btn">Search</button>
+            <button id="clearSearchBtn" class="btn">Clear</button>
+            <button id="viewDeckBtn" class="btn">View deck</button>
           </div>
           <div class="spacer"></div>
           <ul id="results"></ul>
         </div>
 
         <!-- Deck -->
-        <div class="card">
+        <div class="card" id="deckPanel">
           <div class="toolbar">
             <div class="row" style="gap:8px; align-items:center;">
               <strong>Cards in Deck</strong>
-              <span class="muted" id="countLabel">0 cards</span>
+              <span class="muted pill" id="countLabel">0 cards</span>
             </div>
             <div class="row">
               <button id="toggleViewBtn" class="btn">Switch to List View</button>
@@ -156,22 +164,23 @@
           <div class="spacer"></div>
           <ul class="muted">
             <li>Search runs only on click/Enter and cancels previous renders.</li>
-            <li>Results & deck show thumbnails (from local index, with API backfill if missing).</li>
+            <li>Results & deck show thumbnails (local index with API backfill if missing).</li>
             <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.6 — Local index search • Click/Enter only • Cancelable render • Thumbnails • Grid/List toggle.</div>
+    <div class="footer">v1.7 — Clear Search • View deck • “Added ✓” feedback • Toast + count bump • Local index search.</div>
   </div>
 </div>
 
-<!-- Firebase (Modular SDK) -->
+<!-- Little toast -->
+<div id="toast"></div>
+
+<!-- Firebase (Modular SDK) + App -->
 <script type="module">
-  /* ==========================
-     Firebase setup
-  ========================== */
+  /* ========= Firebase ========= */
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
   import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
@@ -189,16 +198,17 @@
   const db = getFirestore(app);
   try { enableIndexedDbPersistence(db); } catch (_) {}
 
-  /* ==========================
-     DOM helpers & state
-  ========================== */
-  const $ = sel => document.querySelector(sel);
+  /* ========= Helpers & state ========= */
+  const $ = s => document.querySelector(s);
   const byId = id => document.getElementById(id);
   const slugSpan = byId('deckSlug');
   const deckUrlInput = byId('deckUrl');
+  const deckPanel = byId('deckPanel');
+  const countLabel = byId('countLabel');
 
   const params = new URLSearchParams(location.search);
   let slug = (params.get('deck')||'').trim();
+
   function setSlug(newSlug, push=true){
     slug = newSlug;
     slugSpan.textContent = slug || '—';
@@ -242,9 +252,7 @@
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
   function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
 
-  /* ==========================
-     Grid/List toggle
-  ========================== */
+  /* ========= Grid/List ========= */
   const listEl = byId('list');
   const toggleBtn = byId('toggleViewBtn');
   let viewMode = localStorage.getItem('deck_view') || 'grid';
@@ -261,18 +269,17 @@
     render();
   };
 
-  /* ==========================
-     Render deck
-  ========================== */
+  /* ========= Render deck ========= */
   function render(){
     const list = byId('list');
     list.innerHTML = '';
     const cards = (currentDeck?.cards)||[];
     const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
-    byId('countLabel').textContent = `${fmtCount(cards.length)} • ${total} total`;
+    countLabel.textContent = `${fmtCount(cards.length)} • ${total} total`;
 
     cards.forEach(c=>{
       const li = document.createElement('li');
+
       const img = document.createElement('img');
       img.className = 'thumb';
       img.loading = 'lazy';
@@ -311,10 +318,8 @@
     debouncedBackfill();
   }
 
-  /* ==========================
-     Image backfill helpers
-  ========================== */
-  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826'; // optional, for backfill/API lookups
+  /* ========= Image backfill ========= */
+  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826'; // optional
   const idCache = new Map();
   const imageCache = new Map();
   function parseSetNumFromId(id){
@@ -362,9 +367,21 @@
     if (changed){ await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() }); }
   }, 250);
 
-  /* ==========================
-     Deck actions
-  ========================== */
+  /* ========= Toast + count bump ========= */
+  const toast = byId('toast');
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(()=> toast.classList.remove('show'), 900);
+  }
+  function bumpCount(){
+    countLabel.classList.remove('bump');
+    // force reflow to restart animation
+    void countLabel.offsetWidth;
+    countLabel.classList.add('bump');
+  }
+
+  /* ========= Deck actions ========= */
   async function addCard(id, name, qty, image){
     id = normalizeId(id);
     qty = Math.max(1, Number(qty||1));
@@ -379,6 +396,8 @@
       const next = [...cards, { id, name:(name||'').trim(), qty, image: image||'', added_at: new Date().toISOString() }];
       await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
     }
+    bumpCount();
+    showToast(`${name || id} +${qty}`);
     byId('cardId').value=''; byId('cardName').value=''; byId('qty').value='1';
   }
   async function changeQty(id, delta){
@@ -388,15 +407,16 @@
     if (idx<0) return;
     const next = [...cards];
     const newQty = Math.max(0, Number(next[idx].qty||1) + delta);
-    if (newQty===0){ next.splice(idx,1); }
-    else { next[idx] = { ...next[idx], qty:newQty }; }
+    if (newQty===0){ next.splice(idx,1); } else { next[idx] = { ...next[idx], qty:newQty }; }
     await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    bumpCount();
   }
   async function removeCard(id){
     id = normalizeId(id || byId('cardId').value);
     const cards = (currentDeck?.cards)||[];
     const next = cards.filter(c=>c.id!==id);
     await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() });
+    bumpCount();
   }
   async function checkCard(id){
     id = normalizeId(id || byId('cardId').value);
@@ -415,9 +435,7 @@
     a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   }
 
-  /* ==========================
-     Wire up buttons
-  ========================== */
+  /* ========= Wire up buttons ========= */
   byId('createBtn').onclick = async ()=>{
     const id = crypto.randomUUID();
     setSlug(id);
@@ -434,7 +452,6 @@
     const id = byId('cardId').value;
     const name = byId('cardName').value;
     const qty = byId('qty').value;
-    // try to prefill image (from CDN/API)
     const img = await resolveImageForCardId(id);
     await addCard(id, name || '', qty, img);
   };
@@ -462,47 +479,34 @@
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
   };
 
-  /* ==========================
-     LOCAL index search (instant)
-  ========================== */
+  /* ========= LOCAL index search (instant) ========= */
   const LOCAL_INDEX_URL = './cards.min.json';
-  let NAME_INDEX = []; // [{n,id,img}]
+  let NAME_INDEX = [];
   let indexReady = false;
 
   async function loadNameIndex(){
     if (indexReady) return;
-    // cache in localStorage
     const cached = localStorage.getItem('ptcg:nameindex');
-    if (cached){
-      try { NAME_INDEX = JSON.parse(cached); indexReady = true; return; } catch {}
-    }
+    if (cached){ try { NAME_INDEX = JSON.parse(cached); indexReady = true; return; } catch{} }
     const res = await fetch(LOCAL_INDEX_URL, { cache:'no-store' });
     NAME_INDEX = await res.json();
     localStorage.setItem('ptcg:nameindex', JSON.stringify(NAME_INDEX));
     indexReady = true;
   }
-
   function localSearchByName(q, limit=100){
     q = q.trim().toLowerCase();
     if (!q) return [];
     const out = [];
     for (const r of NAME_INDEX){
-      if (r.n.toLowerCase().includes(q)){
-        out.push(r);
-        if (out.length >= limit) break;
-      }
+      if (r.n.toLowerCase().includes(q)){ out.push(r); if (out.length>=limit) break; }
     }
     return out;
   }
 
-  // cancelable render
   let renderAbort = { aborted:false };
   function renderResults(rows, container, token){
     container.innerHTML = '';
-    if (rows.length === 0){
-      container.innerHTML = '<li class="muted">No matches.</li>';
-      return;
-    }
+    if (rows.length === 0){ container.innerHTML = '<li class="muted">No matches.</li>'; return; }
     const frag = document.createDocumentFragment();
     for (const row of rows){
       if (token.aborted) return;
@@ -511,7 +515,12 @@
       const info = document.createElement('div');
       info.innerHTML = `<div><strong>${row.n}</strong> <span class="pill">${row.id}</span></div>`;
       const add = document.createElement('button'); add.textContent='Add'; add.className='btn';
-      add.onclick = () => addCard(row.id, row.n, 1, row.img || '');
+      add.onclick = async () => {
+        add.disabled = true; const old = add.textContent;
+        add.textContent = 'Added ✓';
+        await addCard(row.id, row.n, 1, row.img || '');
+        setTimeout(()=>{ add.disabled=false; add.textContent=old; }, 700);
+      };
       li.append(img, info, add);
       frag.appendChild(li);
     }
@@ -522,18 +531,26 @@
     const name = byId('searchName').value.trim();
     const results = byId('results');
     if (!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
-
     results.innerHTML = '<li class="muted">Loading index…</li>';
     try { await loadNameIndex(); } catch { results.innerHTML='<li class="muted">Failed to load index.</li>'; return; }
-
     const rows = localSearchByName(name, 300);
-    renderAbort.aborted = true; // cancel any previous render
-    renderAbort = { aborted:false };
+    renderAbort.aborted = true; renderAbort = { aborted:false };
     renderResults(rows, results, renderAbort);
+  }
+
+  // NEW: Clear search + View deck
+  function clearSearch(){
+    byId('searchName').value = '';
+    byId('results').innerHTML = '';
+  }
+  function viewDeck(){
+    deckPanel.scrollIntoView({ behavior:'smooth', block:'start' });
   }
 
   byId('searchBtn').onclick = doSearch;
   byId('searchName').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); doSearch(); } });
+  byId('clearSearchBtn').onclick = clearSearch;
+  byId('viewDeckBtn').onclick = viewDeck;
 
   // boot
   if (slug) { subscribe(); }
