@@ -1,9 +1,9 @@
 <script>
-fetch('https://raw.githubusercontent.com/mingyew1994/Deck/main/cards.min.json')
-  .then(response => response.json())
+fetch('cards.min.json')
+  .then(res => res.json())
   .then(data => {
-    console.log("Loaded cards:", data);
-    // Your code to display or process the cards
+    console.log('Loaded cards:', data.length);
+    // TODO: use the data here
   })
-  .catch(err => console.error("Error loading JSON:", err));
+  .catch(err => console.error('Error loading JSON:', err));
 </script>
