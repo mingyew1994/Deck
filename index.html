@@ -1,13 +1,333 @@
-<script>
-fetch('https://raw.githubusercontent.com/mingyew1994/Deck/main/cards.min.json')
-  .then(response => response.json())
-  .then(data => {
-    console.log("Loaded cards:", data);
-    document.body.innerHTML = `
-      <h1>Deck – Local Index Loader</h1>
-      <p>Loaded ${data.length} cards ✅</p>
-      <pre>${JSON.stringify(data[0], null, 2)}</pre>
-    `;
-  })
-  .catch(err => console.error("Error loading JSON:", err));
-</script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Deck Box</title>
+  <meta name="color-scheme" content="dark light"/>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#111827; --muted:#9aa7b7; --edge:#243244; --text:#e6edf3;
+      --accent:#4ea1ff; --accent-2:#67f18d; --danger:#ff6b6b;
+      --pill:#1e2a39; --btn:#1a2740; --btn-hover:#223355;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1100px;margin:28px auto;padding:0 16px}
+    .card{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:18px;box-shadow:0 2px 24px rgba(0,0,0,.25)}
+    h1{margin:0 0 10px 0;font-size:24px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input,button,select{font:inherit}
+    input[type=text],input[type=number]{background:#0b1320;border:1px solid var(--edge);color:var(--text);padding:10px 12px;border-radius:10px;outline:none;min-width:0}
+    input[type=text]:focus, input[type=number]:focus{border-color:#38507c}
+    .btn{background:var(--btn);color:#fff;border:1px solid var(--edge);padding:9px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{background:var(--btn-hover)}
+    .btn.primary{background:#2563eb;border-color:#1d4ed8}
+    .btn.danger{background:#7a1e1e;border-color:#a52828}
+    .pill{background:var(--pill);border:1px solid var(--edge);color:var(--muted);padding:2px 8px;border-radius:999px;font-size:12px;margin-left:6px}
+    .muted{color:var(--muted)}
+    .spacer{height:10px}
+    .panel{margin-top:14px}
+    .hr{height:1px;background:var(--edge);margin:12px 0}
+
+    /* search results + deck list */
+    ul{list-style:none;margin:0;padding:0}
+    .result,.deck-item{display:flex;gap:12px;align-items:center;border:1px solid var(--edge);background:#0b1320;border-radius:14px;padding:10px 12px}
+    .result img,.deck-item img{width:50px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--edge);background:#0b1220}
+    .grow{flex:1 1 auto;min-width:0}
+    .title{font-weight:600}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+    .list{display:flex;flex-direction:column;gap:12px}
+
+    .qty-btn{width:40px;height:34px}
+    .qty{min-width:36px;text-align:center;background:#0b1320;border:1px solid var(--edge);border-radius:8px;padding:6px 8px;margin:0 6px}
+    .topline{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .tiny{font-size:12px}
+
+    @media (max-width:560px){
+      .result img,.deck-item img{width:44px;height:62px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="topline">
+        <h1>Deck Box</h1>
+        <div class="tiny muted">v1.1 — local index + Firestore</div>
+      </div>
+
+      <!-- Deck header -->
+      <div class="row">
+        <div class="muted">Deck:</div>
+        <div id="deckId" class="pill">—</div>
+        <button class="btn" id="copyDeck">Copy ID</button>
+        <div class="grow"></div>
+        <button class="btn primary" id="createDeck">Create new deck</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- Search controls -->
+      <div class="panel">
+        <div class="row" style="gap:8px;">
+          <input id="searchName" type="text" placeholder="Search Pokémon cards (e.g., Pikachu)" class="grow" />
+          <select id="viewMode" class="btn" title="View as">
+            <option value="grid" selected>Grid</option>
+            <option value="list">Rows</option>
+          </select>
+          <button class="btn" id="searchBtn">Search</button>
+        </div>
+        <div class="spacer"></div>
+        <div id="searchSummary" class="muted tiny"></div>
+        <div id="results" class="grid"></div>
+      </div>
+
+      <div class="hr"></div>
+
+      <!-- Deck list -->
+      <div class="panel">
+        <div class="topline">
+          <div class="title">Cards in Deck <span id="deckCount" class="pill">0 cards</span></div>
+          <button class="btn danger" id="clearDeck">Clear deck</button>
+        </div>
+        <div id="deckList" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase (modular CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // ===== 1) Firebase config (your project) =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyCxmKPfglneWP0PbzFumT9Az24M9k4ZuJI",
+      authDomain: "decksmiths-2025.firebaseapp.com",
+      projectId: "decksmiths-2025",
+      storageBucket: "decksmiths-2025.firebasestorage.app",
+      messagingSenderId: "487112789478",
+      appId: "1:487112789478:web:5b8be16aea20c90a199a27",
+      measurementId: "G-GFBVJ4BGDT"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ===== 2) Helpers =====
+    const $ = sel => document.querySelector(sel);
+    const byId = id => document.getElementById(id);
+    const status = (msg) => byId('searchSummary').textContent = msg || '';
+
+    const LOCAL_INDEX_URL = './cards.min.json';
+    let NAME_INDEX = []; // { n, id, img }
+    let INDEX_READY = false;
+    let renderAbort = { aborted:false }; // simple cancel token for renders
+    let currentDeckId = null;
+    let unsub = null; // Firestore live sub
+    let liveDeck = { cards:{} }; // shape: {cards: { [id]: {n,img,qty}}}
+
+    function saveCache(key, obj){ localStorage.setItem(key, JSON.stringify(obj)); }
+    function readCache(key, fallback){ try{ return JSON.parse(localStorage.getItem(key)||'null') ?? fallback } catch { return fallback } }
+
+    async function loadNameIndex(){
+      // try cache first
+      const cached = readCache('ptcg:nameindex', null);
+      if (cached?.length) { NAME_INDEX = cached; INDEX_READY = true; return; }
+      const res = await fetch(LOCAL_INDEX_URL, { cache: 'no-store' });
+      NAME_INDEX = await res.json();
+      saveCache('ptcg:nameindex', NAME_INDEX);
+      INDEX_READY = true;
+    }
+
+    function localSearchByName(query, limit=100){
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+      const out = [];
+      for (const row of NAME_INDEX) {
+        if (row.n.toLowerCase().includes(q)) {
+          out.push(row);
+          if (out.length >= limit) break;
+        }
+      }
+      return out;
+    }
+
+    // ===== 3) Search UI (click/Enter only, cancelable render) =====
+    async function doSearch(){
+      const q = byId('searchName').value.trim();
+      const resultsEl = byId('results');
+      status('');
+      resultsEl.innerHTML = '';
+      if (!q){ status('Type a card name and press Search.'); return; }
+
+      if (!INDEX_READY){
+        status('Loading local index…');
+        try{ await loadNameIndex(); } catch(e){ status('Failed to load index.'); return; }
+      }
+
+      const rows = localSearchByName(q, 500);
+      status(`${rows.length} result(s) for “${q}”`);
+      // cancel any in-flight render
+      renderAbort.aborted = true;
+      renderAbort = { aborted:false };
+
+      renderResults(rows, resultsEl, renderAbort);
+    }
+
+    function renderResults(rows, container, token){
+      container.className = byId('viewMode').value === 'grid' ? 'grid' : 'list';
+      container.innerHTML = '';
+      const CHUNK = 40;
+      let i = 0;
+
+      function chunk(){
+        if (token.aborted) return;
+        const frag = document.createDocumentFragment();
+        for (let c=0; c<CHUNK && i<rows.length; c++, i++){
+          const r = rows[i];
+          const li = document.createElement('div');
+          li.className = 'result';
+          const img = document.createElement('img');
+          img.src = r.img || '';
+          img.alt = r.n;
+          img.loading = 'lazy';
+          img.onerror = () => { img.style.display='none'; };
+
+          const info = document.createElement('div'); info.className='grow';
+          info.innerHTML = `<div class="title">${r.n}<span class="pill">${r.id}</span></div>`;
+
+          const add = document.createElement('button'); add.className='btn'; add.textContent='Add';
+          add.onclick = () => addToDeck(r.id, r.n, r.img);
+
+          li.append(img, info, add);
+          frag.appendChild(li);
+        }
+        container.appendChild(frag);
+        if (i < rows.length) requestAnimationFrame(chunk);
+      }
+      requestAnimationFrame(chunk);
+    }
+
+    // ===== 4) Deck storage (Firestore) =====
+    function uuid(){ return (crypto.randomUUID && crypto.randomUUID()) || 'xxxxxxxxyxxx4xxxyyxxxxxx'.replace(/[xy]/g,c=>((Math.random()*16)|0).toString(16)); }
+
+    async function ensureDeck(id){
+      const ref = doc(db, 'decks', id);
+      const snap = await getDoc(ref);
+      if (!snap.exists()){
+        await setDoc(ref, { createdAt: Date.now(), cards:{} });
+      }
+      return ref;
+    }
+
+    function mountDeck(id){
+      currentDeckId = id;
+      byId('deckId').textContent = id;
+      byId('deckId').title = 'Deck UUID';
+      if (unsub) unsub();
+      const ref = doc(db, 'decks', id);
+      unsub = onSnapshot(ref, s => {
+        const data = s.data() || {cards:{}};
+        liveDeck = data;
+        renderDeck();
+      });
+      history.replaceState(null,'',`#${id}`);
+    }
+
+    async function createDeck(){
+      const id = uuid();
+      await ensureDeck(id);
+      mountDeck(id);
+    }
+
+    function renderDeck(){
+      const list = byId('deckList'); list.innerHTML='';
+      const cards = liveDeck.cards || {};
+      const entries = Object.entries(cards).sort((a,b)=> (a[1].n||'').localeCompare(b[1].n||''));
+      let total = 0;
+
+      for (const [id, v] of entries){
+        const li = document.createElement('div'); li.className='deck-item';
+        const img = document.createElement('img'); img.src = v.img || ''; img.alt = v.n || id; img.onerror=()=>{img.style.display='none';};
+        const info = document.createElement('div'); info.className='grow';
+        info.innerHTML = `<div class="title">${v.n || id}<span class="pill">${id}</span></div>`;
+        const qty = document.createElement('span'); qty.className='qty'; qty.textContent = v.qty || 1;
+
+        const plus = document.createElement('button'); plus.className='btn qty-btn'; plus.textContent='+1';
+        plus.onclick = () => changeQty(id, +1);
+        const minus = document.createElement('button'); minus.className='btn qty-btn'; minus.textContent='-1';
+        minus.onclick = () => changeQty(id, -1);
+        const rm = document.createElement('button'); rm.className='btn danger'; rm.textContent='Remove';
+        rm.onclick = () => changeQty(id, 'remove');
+
+        li.append(img, info, minus, qty, plus, rm);
+        list.appendChild(li);
+        total += (v.qty || 1);
+      }
+      byId('deckCount').textContent = `${entries.length} cards • ${total} total`;
+    }
+
+    async function addToDeck(id, name, img){
+      if (!currentDeckId){ await createDeck(); }
+      const cards = structuredClone(liveDeck.cards || {});
+      const cur = cards[id] || { n:name, img:img || '', qty:0 };
+      cur.n = name || cur.n;
+      cur.img = img || cur.img || '';
+      cur.qty = (cur.qty||0) + 1;
+      cards[id] = cur;
+      await updateDoc(doc(db,'decks', currentDeckId), { cards });
+    }
+
+    async function changeQty(id, delta){
+      const cards = structuredClone(liveDeck.cards || {});
+      const cur = cards[id]; if (!cur) return;
+      if (delta === 'remove'){ delete cards[id]; }
+      else {
+        cur.qty = Math.max(0, (cur.qty||0) + delta);
+        if (cur.qty === 0) delete cards[id];
+        else cards[id] = cur;
+      }
+      await updateDoc(doc(db,'decks', currentDeckId), { cards });
+    }
+
+    async function clearDeck(){
+      if (!currentDeckId) return;
+      await updateDoc(doc(db,'decks', currentDeckId), { cards:{} });
+    }
+
+    // ===== 5) Wire up UI =====
+    byId('searchBtn').addEventListener('click', doSearch);
+    byId('searchName').addEventListener('keydown', e => {
+      if (e.key === 'Enter'){ e.preventDefault(); doSearch(); }
+    });
+    byId('viewMode').addEventListener('change', () => {
+      // reflow existing results container class
+      const r = byId('results');
+      r.className = byId('viewMode').value === 'grid' ? 'grid' : 'list';
+    });
+    byId('createDeck').addEventListener('click', createDeck);
+    byId('clearDeck').addEventListener('click', clearDeck);
+    byId('copyDeck').addEventListener('click', async ()=>{
+      if (!currentDeckId) return;
+      await navigator.clipboard.writeText(currentDeckId);
+      byId('copyDeck').textContent = 'Copied!';
+      setTimeout(()=> byId('copyDeck').textContent='Copy ID', 900);
+    });
+
+    // boot
+    (async () => {
+      // load index in the background (first search will await if not ready)
+      loadNameIndex().catch(()=>{});
+      // deck from URL hash or create none (user can click Create)
+      const hash = (location.hash||'').replace('#','').trim();
+      if (hash){
+        await ensureDeck(hash);
+        mountDeck(hash);
+      }
+      // small UX hint
+      status('Type a name and press Search. Toggle Grid/Rows on the right.');
+    })();
+  </script>
+</body>
+</html>
