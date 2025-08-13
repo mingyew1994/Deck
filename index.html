@@ -30,9 +30,16 @@
     .footer { text-align:center; color:#6a7f93; font-size:12px; margin-top:14px; }
     .hidden { display:none; }
 
-    /* Search results list */
-    .result { display:flex; gap:10px; align-items:center; }
-    .result img { width:56px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
+    /* Search results: LIST */
+    #results.list { display:block; }
+    #results.list > li { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
+    #results.list img { width:72px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
+
+    /* Search results: GRID */
+    #results.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    #results.grid > li { display:flex; flex-direction:column; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
+    #results.grid img { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; border:1px solid #203040; background:#0b1320; }
+    #results.grid .info { margin:8px 0; }
 
     /* Deck views */
     #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
@@ -107,9 +114,10 @@
             <button id="searchBtn" class="btn">Search</button>
             <button id="clearSearchBtn" class="btn">Clear</button>
             <button id="viewDeckBtn" class="btn">View deck</button>
+            <button id="toggleSearchViewBtn" class="btn">Search: Grid</button>
           </div>
           <div class="spacer"></div>
-          <ul id="results"></ul>
+          <ul id="results" class="list"></ul>
         </div>
 
         <!-- Deck -->
@@ -171,7 +179,7 @@
       </div>
     </div>
 
-    <div class="footer">v1.7 — Clear Search • View deck • “Added ✓” feedback • Toast + count bump • Local index search.</div>
+    <div class="footer">v1.8 — Search Grid/List toggle • Clear Search • View deck • Toast + count bump • Local index search.</div>
   </div>
 </div>
 
@@ -252,7 +260,7 @@
   function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
   function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
 
-  /* ========= Grid/List ========= */
+  /* ========= Grid/List (deck) ========= */
   const listEl = byId('list');
   const toggleBtn = byId('toggleViewBtn');
   let viewMode = localStorage.getItem('deck_view') || 'grid';
@@ -376,8 +384,7 @@
   }
   function bumpCount(){
     countLabel.classList.remove('bump');
-    // force reflow to restart animation
-    void countLabel.offsetWidth;
+    void countLabel.offsetWidth; // restart animation
     countLabel.classList.add('bump');
   }
 
@@ -435,7 +442,7 @@
     a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   }
 
-  /* ========= Wire up buttons ========= */
+  /* ========= Wire up (deck controls) ========= */
   byId('createBtn').onclick = async ()=>{
     const id = crypto.randomUUID();
     setSlug(id);
@@ -476,10 +483,11 @@
     }
   };
   byId('copyUrlBtn').onclick = async () => {
-    try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch { /* ignore */ }
+    try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch {}
+
   };
 
-  /* ========= LOCAL index search (instant) ========= */
+  /* ========= LOCAL index search (instant) + view toggle ========= */
   const LOCAL_INDEX_URL = './cards.min.json';
   let NAME_INDEX = [];
   let indexReady = false;
@@ -503,25 +511,65 @@
     return out;
   }
 
+  // search view toggle (persisted)
+  const resultsEl = byId('results');
+  const toggleSearchViewBtn = byId('toggleSearchViewBtn');
+  let searchView = localStorage.getItem('search_view') || 'list'; // 'list' | 'grid'
+  function applySearchView(){
+    resultsEl.classList.remove('list','grid');
+    resultsEl.classList.add(searchView);
+    toggleSearchViewBtn.textContent = `Search: ${searchView === 'grid' ? 'Grid' : 'List'}`;
+  }
+  applySearchView();
+  toggleSearchViewBtn.onclick = ()=>{
+    searchView = (searchView === 'grid') ? 'list' : 'grid';
+    localStorage.setItem('search_view', searchView);
+    applySearchView();
+    // re-render current items with new layout
+    if (resultsEl.children.length) {
+      const name = byId('searchName').value.trim();
+      if (name) doSearch();
+    }
+  };
+
   let renderAbort = { aborted:false };
   function renderResults(rows, container, token){
     container.innerHTML = '';
     if (rows.length === 0){ container.innerHTML = '<li class="muted">No matches.</li>'; return; }
+
     const frag = document.createDocumentFragment();
     for (const row of rows){
       if (token.aborted) return;
-      const li = document.createElement('li'); li.className='result';
-      const img = document.createElement('img'); img.src=row.img||''; img.alt=row.n; img.loading='lazy'; img.onerror=()=>{img.style.display='none';};
+
+      const li = document.createElement('li');
+      const img = document.createElement('img');
+      img.src = row.img || '';
+      img.alt = row.n;
+      img.loading = 'lazy';
+      img.onerror = ()=>{ img.style.display='none'; };
+
       const info = document.createElement('div');
+      info.className = 'info';
       info.innerHTML = `<div><strong>${row.n}</strong> <span class="pill">${row.id}</span></div>`;
-      const add = document.createElement('button'); add.textContent='Add'; add.className='btn';
+
+      const add = document.createElement('button');
+      add.textContent='Add';
+      add.className='btn';
       add.onclick = async () => {
         add.disabled = true; const old = add.textContent;
         add.textContent = 'Added ✓';
         await addCard(row.id, row.n, 1, row.img || '');
         setTimeout(()=>{ add.disabled=false; add.textContent=old; }, 700);
       };
-      li.append(img, info, add);
+
+      if (searchView === 'grid') {
+        li.append(img, info, add);
+      } else {
+        // list layout: thumbnail, text, button
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
+        li.append(img, info, add);
+      }
       frag.appendChild(li);
     }
     container.appendChild(frag);
@@ -529,7 +577,7 @@
 
   async function doSearch(){
     const name = byId('searchName').value.trim();
-    const results = byId('results');
+    const results = resultsEl;
     if (!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
     results.innerHTML = '<li class="muted">Loading index…</li>';
     try { await loadNameIndex(); } catch { results.innerHTML='<li class="muted">Failed to load index.</li>'; return; }
@@ -538,10 +586,10 @@
     renderResults(rows, results, renderAbort);
   }
 
-  // NEW: Clear search + View deck
+  // Clear search + View deck
   function clearSearch(){
     byId('searchName').value = '';
-    byId('results').innerHTML = '';
+    resultsEl.innerHTML = '';
   }
   function viewDeck(){
     deckPanel.scrollIntoView({ behavior:'smooth', block:'start' });
