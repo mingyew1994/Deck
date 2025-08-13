@@ -41,6 +41,11 @@
     #results.grid img { width:100%; height:auto; max-height:260px; object-fit:cover; border-radius:12px; border:1px solid #203040; background:#0b1320; }
     #results.grid .info { margin:8px 0; }
 
+    /* Pagination */
+    .pager { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:10px; }
+    .pager .btn { height:36px; padding:8px 12px; }
+    .pager select { height:36px; }
+
     /* Deck views */
     #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
     #list.grid > li { display:flex; flex-direction:column; align-items:stretch; margin:0; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
@@ -63,6 +68,9 @@
     #toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); }
     @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.12)} 100%{transform:scale(1)} }
     .bump { animation:bump .35s ease; }
+
+    /* Make anchor scroll nicer */
+    #deckPanel { scroll-margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -118,6 +126,13 @@
           </div>
           <div class="spacer"></div>
           <ul id="results" class="list"></ul>
+          <div id="searchPager" class="pager hidden">
+            <button id="prevPage" class="btn">Prev</button>
+            <span class="muted">Page</span>
+            <select id="pageSelect"></select>
+            <span class="muted" id="pageTotal"></span>
+            <button id="nextPage" class="btn">Next</button>
+          </div>
         </div>
 
         <!-- Deck -->
@@ -171,15 +186,15 @@
           <strong>Notes</strong>
           <div class="spacer"></div>
           <ul class="muted">
-            <li>Search runs only on click/Enter and cancels previous renders.</li>
-            <li>Results & deck show thumbnails (local index with API backfill if missing).</li>
-            <li>Anyone with this URL can edit (no login). Use unique, unguessable UUIDs.</li>
+            <li>Search uses a local index with 12 results per page (faster + lighter).</li>
+            <li>“View deck” clears results to avoid layout shifts before scrolling.</li>
+            <li>No login; the deck link is the “key”.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v1.8 — Search Grid/List toggle • Clear Search • View deck • Toast + count bump • Local index search.</div>
+    <div class="footer">v1.9 — Search pagination (12/page) • Better “View deck” scroll • Search Grid/List toggle • Toast + count bump • Local index search.</div>
   </div>
 </div>
 
@@ -484,10 +499,9 @@
   };
   byId('copyUrlBtn').onclick = async () => {
     try { await navigator.clipboard.writeText(deckUrlInput.value); alert('Deck URL copied!'); } catch {}
-
   };
 
-  /* ========= LOCAL index search (instant) + view toggle ========= */
+  /* ========= LOCAL index search (instant) + view toggle + pagination ========= */
   const LOCAL_INDEX_URL = './cards.min.json';
   let NAME_INDEX = [];
   let indexReady = false;
@@ -501,12 +515,12 @@
     localStorage.setItem('ptcg:nameindex', JSON.stringify(NAME_INDEX));
     indexReady = true;
   }
-  function localSearchByName(q, limit=100){
+  function localSearchByName(q){
     q = q.trim().toLowerCase();
     if (!q) return [];
     const out = [];
     for (const r of NAME_INDEX){
-      if (r.n.toLowerCase().includes(q)){ out.push(r); if (out.length>=limit) break; }
+      if (r.n.toLowerCase().includes(q)){ out.push(r); }
     }
     return out;
   }
@@ -525,12 +539,24 @@
     searchView = (searchView === 'grid') ? 'list' : 'grid';
     localStorage.setItem('search_view', searchView);
     applySearchView();
-    // re-render current items with new layout
-    if (resultsEl.children.length) {
-      const name = byId('searchName').value.trim();
-      if (name) doSearch();
-    }
+    renderSearchPage(); // re-render current page with new layout
   };
+
+  // pagination state
+  const pager = byId('searchPager');
+  const prevBtn = byId('prevPage');
+  const nextBtn = byId('nextPage');
+  const pageSel = byId('pageSelect');
+  const pageTotalEl = byId('pageTotal');
+
+  const PAGE_SIZE = 12;
+  let searchRows = [];
+  let page = 1;
+  function totalPages(){ return Math.max(1, Math.ceil(searchRows.length / PAGE_SIZE)); }
+
+  prevBtn.onclick = ()=> { if (page>1){ page--; renderSearchPage(true); } };
+  nextBtn.onclick = ()=> { if (page<totalPages()){ page++; renderSearchPage(true); } };
+  pageSel.onchange = ()=> { page = Number(pageSel.value||1); renderSearchPage(true); };
 
   let renderAbort = { aborted:false };
   function renderResults(rows, container, token){
@@ -562,37 +588,73 @@
         setTimeout(()=>{ add.disabled=false; add.textContent=old; }, 700);
       };
 
-      if (searchView === 'grid') {
-        li.append(img, info, add);
-      } else {
-        // list layout: thumbnail, text, button
-        li.style.display = 'flex';
-        li.style.alignItems = 'center';
-        li.append(img, info, add);
-      }
+      // same structure works for both list & grid
+      li.append(img, info, add);
       frag.appendChild(li);
     }
     container.appendChild(frag);
   }
 
-  async function doSearch(){
-    const name = byId('searchName').value.trim();
-    const results = resultsEl;
-    if (!name){ results.innerHTML = '<li class="muted">Type a name and press Search.</li>'; return; }
-    results.innerHTML = '<li class="muted">Loading index…</li>';
-    try { await loadNameIndex(); } catch { results.innerHTML='<li class="muted">Failed to load index.</li>'; return; }
-    const rows = localSearchByName(name, 300);
+  function renderSearchPage(keepTop=false){
+    // slice rows for current page
+    const tPages = totalPages();
+    if (page > tPages) page = tPages;
+    const start = (page-1)*PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    const slice = searchRows.slice(start, end);
+
+    // update pager UI
+    if (searchRows.length === 0){
+      pager.classList.add('hidden');
+    } else {
+      pager.classList.remove('hidden');
+      // rebuild select only if needed
+      if (pageSel.options.length !== tPages){
+        pageSel.innerHTML = '';
+        for (let i=1;i<=tPages;i++){
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = String(i);
+          pageSel.appendChild(opt);
+        }
+      }
+      pageSel.value = String(page);
+      pageTotalEl.textContent = `of ${tPages}`;
+      prevBtn.disabled = page<=1;
+      nextBtn.disabled = page>=tPages;
+    }
+
+    // render
     renderAbort.aborted = true; renderAbort = { aborted:false };
-    renderResults(rows, results, renderAbort);
+    renderResults(slice, resultsEl, renderAbort);
+
+    // optionally keep the results top in view when paging
+    if (!keepTop) return;
+    resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
   }
 
-  // Clear search + View deck
+  async function doSearch(){
+    const name = byId('searchName').value.trim();
+    if (!name){ resultsEl.innerHTML = '<li class="muted">Type a name and press Search.</li>'; pager.classList.add('hidden'); return; }
+    resultsEl.innerHTML = '<li class="muted">Loading index…</li>';
+    try { await loadNameIndex(); } catch { resultsEl.innerHTML='<li class="muted">Failed to load index.</li>'; pager.classList.add('hidden'); return; }
+    searchRows = localSearchByName(name);
+    page = 1;
+    renderSearchPage();
+  }
+
+  // Clear search + View deck (improved)
   function clearSearch(){
     byId('searchName').value = '';
     resultsEl.innerHTML = '';
+    pager.classList.add('hidden');
   }
   function viewDeck(){
+    // clear results first to avoid layout shifts while images load
+    clearSearch();
     deckPanel.scrollIntoView({ behavior:'smooth', block:'start' });
+    // nudge again shortly after in case something still adjusted layout
+    setTimeout(()=> deckPanel.scrollIntoView({ behavior:'smooth', block:'start' }), 250);
   }
 
   byId('searchBtn').onclick = doSearch;
