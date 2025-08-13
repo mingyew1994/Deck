@@ -1,9 +1,59 @@
-<script>
-fetch('cards.min.json')
-  .then(res => res.json())
-  .then(data => {
-    console.log('Loaded cards:', data.length);
-    // TODO: use the data here
-  })
-  .catch(err => console.error('Error loading JSON:', err));
-</script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deck – JSON test</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:#0b1220;color:#e6edf3;margin:0;padding:24px}
+    .card{max-width:900px;margin:0 auto;background:#111827;border:1px solid #243244;border-radius:16px;padding:20px;box-shadow:0 2px 20px rgba(0,0,0,.25)}
+    h1{margin:0 0 8px 0;font-size:22px}
+    .muted{color:#9aa7b7}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0b1320;padding:12px;border-radius:12px;border:1px solid #1e2a39}
+    .ok{color:#67f18d} .err{color:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Deck – Local Index Loader</h1>
+    <div id="status" class="muted">Loading <code>cards.min.json</code>…</div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    (async function () {
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+
+      // IMPORTANT: fetch the local file (same folder as index.html)
+      const url = './cards.min.json'; // don't use raw.githubusercontent.com here
+
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) {
+          status.innerHTML = `<span class="err">Error: ${res.status} ${res.statusText}</span><br>
+                              Make sure <code>cards.min.json</code> sits next to <code>index.html</code> and Pages has deployed.`;
+          return;
+        }
+        const data = await res.json();
+
+        status.innerHTML = `<span class="ok">Loaded ${data.length.toLocaleString()} cards ✅</span>`;
+        const sample = data[0] || {};
+        result.innerHTML = `
+          <p class="muted">Sample item:</p>
+          <pre>${JSON.stringify(sample, null, 2)}</pre>
+        `;
+        console.log('Loaded cards:', data.length, 'sample:', sample);
+      } catch (err) {
+        status.innerHTML = `<span class="err">Fetch/parse failed:</span>`;
+        result.innerHTML = `<pre>${String(err)}</pre>`;
+        console.error('Error loading JSON:', err);
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="card"><p class="err">JavaScript is disabled — enable it to load the data.</p></div>
+  </noscript>
+</body>
+</html>
