@@ -51,7 +51,7 @@
     .pager .btn { height:36px; padding:8px 12px; }
     .pager select { height:36px; max-width:140px; }
 
-    /* Deck views (desktop defaults) */
+    /* Deck views — MATCH search grid */
     #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
     #list.grid > li { display:flex; flex-direction:column; align-items:stretch; margin:0; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
     #list.grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; object-position:center; border-radius:12px; margin:0 0 8px 0; border:1px solid #203040; background:#0b1320; }
@@ -88,7 +88,8 @@
       #results.list > li { align-items:flex-start; }
       #results.list .btn { height:38px; }
     }
-    /* Phones: 2 cols (very small) with top-crop */
+
+    /* Phones: 2 cols top-crop (search + deck) */
     @media (max-width:419px){
       #results.grid, #list.grid { grid-template-columns: repeat(2, 1fr); gap:8px; }
       #results.grid > li, #list.grid > li { padding:8px; }
@@ -96,7 +97,7 @@
         width:100%; height:140px; object-fit:cover; object-position: top center; border-radius:10px;
       }
     }
-    /* Small/medium phones: 3 cols with top-crop */
+    /* Small/medium phones: 3 cols top-crop (search + deck) */
     @media (min-width:420px) and (max-width:700px){
       #results.grid, #list.grid { grid-template-columns: repeat(3, 1fr); gap:10px; }
       #results.grid > li, #list.grid > li { padding:8px; }
@@ -104,14 +105,6 @@
         width:100%; height:150px; object-fit:cover; object-position: top center; border-radius:10px;
       }
     }
-
-    /* === Manual column overrides for the DECK grid === */
-    #list.grid.cols-2 { grid-template-columns: repeat(2, 1fr) !important; }
-    #list.grid.cols-3 { grid-template-columns: repeat(3, 1fr) !important; }
-    #list.grid.cols-4 { grid-template-columns: repeat(4, 1fr) !important; }
-    #list.grid.cols-2 .thumb { height:180px !important; object-fit:cover; object-position: top center; }
-    #list.grid.cols-3 .thumb { height:150px !important; object-fit:cover; object-position: top center; }
-    #list.grid.cols-4 .thumb { height:120px !important; object-fit:cover; object-position: top center; }
   </style>
 </head>
 <body>
@@ -181,14 +174,7 @@
               <strong>Cards in Deck</strong>
               <span class="muted pill" id="countLabel">0 cards</span>
             </div>
-            <div class="row" style="gap:8px; align-items:center;">
-              <label class="muted" for="deckCols">Cols</label>
-              <select id="deckCols" title="Columns">
-                <option value="auto">Auto</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </select>
+            <div class="row">
               <button id="toggleViewBtn" class="btn">Switch to List View</button>
             </div>
           </div>
@@ -233,14 +219,14 @@
           <div class="spacer"></div>
           <ul class="muted">
             <li>Mobile-friendly grid with top-crop images.</li>
-            <li>Deck grid columns are adjustable (Auto/2/3/4).</li>
+            <li>Deck grid matches search grid (auto-fit columns).</li>
             <li>Search pagination (12/page). “View deck” clears results first.</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="footer">v2.2 — Adjustable deck columns • Mobile top-crop • Pagination • Overflow fix.</div>
+    <div class="footer">v2.3 — Deck grid = search grid • Multi-tab persistence enabled • Mobile tuning.</div>
   </div>
 </div>
 
@@ -279,7 +265,9 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  try { enableIndexedDbPersistence(db); } catch (_) {}
+
+  // Enable multi-tab persistence to avoid the "exclusive access" error
+  try { await enableIndexedDbPersistence(db, { synchronizeTabs: true }); } catch (_) {}
 
   /* ========= Helpers & state ========= */
   const $ = s => document.querySelector(s);
@@ -338,35 +326,18 @@
   /* ========= Grid/List (deck) ========= */
   const listEl = byId('list');
   const toggleBtn = byId('toggleViewBtn');
-  const deckColsSel = byId('deckCols');
-
-  // default to 3 cols on very small screens if user hasn't chosen
-  let deckCols = localStorage.getItem('deck_cols') || (window.innerWidth <= 420 ? '3' : 'auto');
   let viewMode = localStorage.getItem('deck_view') || 'grid';
-
-  function applyDeckCols(){
-    listEl.classList.remove('cols-2','cols-3','cols-4');
-    if (deckCols !== 'auto') listEl.classList.add('cols-' + deckCols);
-    deckColsSel.value = deckCols;
-  }
   function applyView(){
     listEl.classList.remove('grid','list');
     listEl.classList.add(viewMode);
     toggleBtn.textContent = viewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View';
   }
   applyView();
-  applyDeckCols();
-
   toggleBtn.onclick = () => {
     viewMode = (viewMode === 'grid') ? 'list' : 'grid';
     localStorage.setItem('deck_view', viewMode);
     applyView();
     render();
-  };
-  deckColsSel.onchange = () => {
-    deckCols = deckColsSel.value;
-    localStorage.setItem('deck_cols', deckCols);
-    applyDeckCols();
   };
 
   /* ========= Render deck ========= */
