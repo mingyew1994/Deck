@@ -57,11 +57,50 @@
     #list.list .controls { display:flex; gap:8px; margin-left:auto; }
 
     /* Deck — GRID (fixed 3 columns) */
-    #list.grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
-    #list.grid > li { display:flex; flex-direction:column; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
-    #list.grid .thumb { width:100%; height:150px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; margin-bottom:8px; }
-    #list.grid .title { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-    #list.grid .controls { display:flex; gap:8px; margin-top:8px; }
+/* Deck — GRID (match "Search results" look) */
+#list.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+#list.grid > li {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border: 1px solid #1d2633;
+  border-radius: 12px;
+  background: #0d141c;
+}
+
+/* Works for either <img> or a .thumb element */
+#list.grid img,
+#list.grid .thumb {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 12px;
+  border: 1px solid #203040;
+  background: #0b1320;
+}
+
+/* Optional: simple spacing block like .info in the first snippet */
+#list.grid .info {
+  margin: 8px 0;
+}
+
+/* (Optional) If you previously had .title/.controls styles,
+   removing them will make the layout simpler like the first code.
+   If they still exist elsewhere, you can neutralize them like this: */
+/*
+#list.grid .title, 
+#list.grid .controls { 
+  display: block; 
+  margin: 8px 0; 
+  font-weight: normal; 
+}
+*/
 
     /* Pagination for search */
     .pager { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:10px; flex-wrap:wrap; }
