@@ -35,16 +35,17 @@
     .footer { text-align:center; color:#6a7f93; font-size:12px; margin-top:14px; }
     .hidden { display:none; }
     .toolbar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin: 10px 0 6px; }
+    #deckPanel { scroll-margin-top: 12px; }
 
     /* Search results — LIST */
     #results.list { display:block; }
     #results.list > li { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; margin-bottom:8px; }
     #results.list img { width:72px; height:auto; border-radius:10px; border:1px solid #203040; background:#0b1320; }
 
-    /* Search results — GRID ( baseline we’ll mirror for deck ) */
-    #results.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    /* Search results — GRID (fixed 3 columns) */
+    #results.grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
     #results.grid > li { display:flex; flex-direction:column; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
-    #results.grid img { width:100%; height:auto; max-height:260px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; }
+    #results.grid img { width:100%; height:150px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; }
     #results.grid .info { margin:8px 0; }
 
     /* Deck — LIST */
@@ -55,10 +56,10 @@
     #list.list .title { font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     #list.list .controls { display:flex; gap:8px; margin-left:auto; }
 
-    /* Deck — GRID (mirrors search grid) */
-    #list.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    /* Deck — GRID (fixed 3 columns) */
+    #list.grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
     #list.grid > li { display:flex; flex-direction:column; padding:10px; border:1px solid #1d2633; border-radius:12px; background:#0d141c; }
-    #list.grid .thumb { width:100%; height:auto; max-height:260px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; }
+    #list.grid .thumb { width:100%; height:150px; object-fit:cover; object-position:center; border-radius:12px; border:1px solid #203040; background:#0b1320; margin-bottom:8px; }
     #list.grid .title { font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:8px; }
     #list.grid .controls { display:flex; gap:8px; margin-top:8px; }
 
@@ -70,6 +71,357 @@
     /* Toast + bump */
     #toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#0f1a26; border:1px solid #203244; padding:10px 14px; border-radius:12px; font-weight:600; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:9999; }
     #toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); }
+    @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.12)} 100%{transform:scale(1)} }
+    .bump { animation:bump .35s ease; }
+
+    /* Mobile polish */
+    @media (max-width:700px){
+      .wrap { padding:12px; }
+      input, select, button { height:40px; padding:10px 12px; font-size:14px; }
+      .btn { line-height:18px; white-space:normal; }
+      #list.list > li { align-items:flex-start; }
+      #list.list .controls { margin-left:0; margin-top:8px; flex-wrap:wrap; width:100%; }
+      #list.list .controls .btn { flex:1 1 calc(33% - 8px); min-width:98px; }
+      #list.list .thumb { width:72px; }
+      #results.list > li { align-items:flex-start; }
+      #results.list .btn { height:38px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Deck Box</h1>
+    <div class="sub">Deck: <span id="deckSlug" class="pill">loading…</span></div>
+
+    <!-- No-deck panel -->
+    <div id="noDeck" class="card" style="margin-bottom:12px;">
+      <div class="row" style="align-items:center; justify-content:space-between; gap:12px;">
+        <div>
+          <strong>No deck loaded.</strong>
+          <div class="muted">Create a new deck (generates a secret link), or paste an existing deck ID.</div>
+        </div>
+        <div class="row"><button id="createBtn" class="btn primary">Create new deck</button></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row">
+        <input id="existingId" placeholder="Paste existing deck UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)" style="flex:1; min-width:260px;" />
+        <button id="openExistingBtn" class="btn">Open</button>
+      </div>
+    </div>
+
+    <div id="app" class="hidden">
+      <div class="stack" style="display:flex; flex-direction:column; gap:12px;">
+
+        <!-- Manual add / qty -->
+        <div class="row">
+          <input id="cardId" placeholder="Card ID (e.g., sv4-123 or full tcg.id)" style="flex:2; min-width:140px" />
+          <input id="cardName" placeholder="Name (optional)" style="flex:3; min-width:160px" />
+          <input id="qty" type="number" min="1" value="1" style="width:90px" title="Quantity" />
+        </div>
+        <div class="row">
+          <button id="addBtn" class="btn primary">Add / Increase</button>
+          <button id="decreaseBtn" class="btn">Decrease</button>
+          <button id="removeBtn" class="btn">Remove card</button>
+          <button id="checkBtn" class="btn">Check in deck?</button>
+        </div>
+
+        <!-- Search (LOCAL INDEX) -->
+        <div class="card">
+          <strong>Search Pokémon cards</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <input id="searchName" placeholder="Type card name (e.g., Charizard)" style="flex:1; min-width:240px" />
+            <button id="searchBtn" class="btn">Search</button>
+            <button id="clearSearchBtn" class="btn">Clear</button>
+            <button id="viewDeckBtn" class="btn">View deck</button>
+            <button id="toggleSearchViewBtn" class="btn">Search: Grid</button>
+          </div>
+          <div class="spacer"></div>
+          <ul id="results" class="list"></ul>
+          <div id="searchPager" class="pager hidden">
+            <button id="prevPage" class="btn">Prev</button>
+            <span class="muted">Page</span>
+            <select id="pageSelect"></select>
+            <span class="muted" id="pageTotal"></span>
+            <button id="nextPage" class="btn">Next</button>
+          </div>
+        </div>
+
+        <!-- Deck -->
+        <div class="card" id="deckPanel">
+          <div class="toolbar">
+            <div class="row" style="gap:8px; align-items:center;">
+              <strong>Cards in Deck</strong>
+              <span class="muted pill" id="countLabel">0 cards</span>
+            </div>
+            <div class="row">
+              <button id="toggleViewBtn" class="btn">Switch to List View</button>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <ul id="list" class="grid"></ul>
+        </div>
+
+      </div>
+
+      <!-- Right column -->
+      <div class="stack" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <strong>Deck Link</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <input id="deckUrl" readonly style="flex:1" />
+            <button id="copyUrlBtn" class="btn">Copy URL</button>
+          </div>
+          <div class="spacer"></div>
+          <div class="muted">Write this URL to your NFC tag. Anyone with this link can view and edit this deck.</div>
+        </div>
+
+        <div class="card">
+          <strong>Import / Export</strong>
+          <div class="spacer"></div>
+          <div class="row">
+            <button id="exportBtn" class="btn">Export JSON</button>
+            <button id="copyBtn" class="btn">Copy</button>
+            <button id="downloadBtn" class="btn">Download</button>
+          </div>
+          <div class="spacer"></div>
+          <textarea id="jsonArea" rows="8" placeholder='Paste JSON here to import'></textarea>
+          <div class="spacer"></div>
+          <div class="row">
+            <button id="importBtn" class="btn">Import JSON</button>
+            <button id="clearBtn" class="btn">Clear deck</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <strong>Notes</strong>
+          <div class="spacer"></div>
+          <ul class="muted">
+            <li>Search & Deck grid fixed to 3 columns in grid view.</li>
+            <li>Search uses local index with pagination (12/page).</li>
+            <li>“Added ✓” feedback + count bump when adding.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">v2.7 — Both grids fixed to 3 cols • Multi-tab persistence • Mobile-safe layout.</div>
+  </div>
+</div>
+
+<!-- Tiny error overlay so blank screens show why -->
+<script>
+  window.addEventListener('error', e => {
+    const msg = (e.error && e.error.stack) ? e.error.stack : (e.message || 'Unknown error');
+    const pre = document.createElement('pre');
+    pre.textContent = 'JS error: ' + msg;
+    pre.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;background:#2a1f1f;color:#ffd7d7;padding:10px;border:1px solid #7a4;z-index:99999;max-height:40vh;overflow:auto;border-radius:8px';
+    document.body.appendChild(pre);
+  });
+  window.addEventListener('unhandledrejection', e => {
+    const pre = document.createElement('pre');
+    pre.textContent = 'Promise rejection: ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
+    pre.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;background:#2a1f1f;color:#ffd7d7;padding:10px;border:1px solid #7a4;z-index:99999;max-height:40vh;overflow:auto;border-radius:8px';
+    document.body.appendChild(pre);
+  });
+</script>
+
+<!-- Firebase + App -->
+<script type="module">
+  /* ========= Firebase ========= */
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCxmKPfglneWP0PbzFumT9Az24M9k4ZuJI",
+    authDomain: "decksmiths-2025.firebaseapp.com",
+    projectId: "decksmiths-2025",
+    storageBucket: "decksmiths-2025.firebasestorage.app",
+    messagingSenderId: "487112789478",
+    appId: "1:487112789478:web:5b8be16aea20c90a199a27",
+    measurementId: "G-GFBVJ4BGDT"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Multi-tab persistence to avoid “exclusive access” error
+  try { await enableIndexedDbPersistence(db, { synchronizeTabs: true }); } catch (_) {}
+
+  /* ========= Helpers & state ========= */
+  const $ = s => document.querySelector(s);
+  const byId = id => document.getElementById(id);
+  const slugSpan = byId('deckSlug');
+  const deckUrlInput = byId('deckUrl');
+  const deckPanel = byId('deckPanel');
+  const countLabel = byId('countLabel');
+
+  const params = new URLSearchParams(location.search);
+  let slug = (params.get('deck')||'').trim();
+
+  function setSlug(newSlug, push=true){
+    slug = newSlug;
+    slugSpan.textContent = slug || '—';
+    if (slug) {
+      const url = `${location.origin}${location.pathname}?deck=${encodeURIComponent(slug)}`;
+      deckUrlInput.value = url;
+      if (push) history.replaceState(null, '', url);
+      $('#noDeck').classList.add('hidden');
+      $('#app').classList.remove('hidden');
+    } else {
+      $('#noDeck').classList.remove('hidden');
+      $('#app').classList.add('hidden');
+    }
+  }
+  setSlug(slug, false);
+
+  const deckRef = () => doc(db, 'decks', slug);
+  let unsub = null;
+  let currentDeck = null;
+
+  async function ensureDeckExists(){
+    if (!slug) return;
+    const snap = await getDoc(deckRef());
+    if (!snap.exists()) {
+      await setDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
+    }
+  }
+  async function subscribe(){
+    if (!slug) return;
+    if (unsub) { unsub(); unsub=null; }
+    await ensureDeckExists();
+    unsub = onSnapshot(deckRef(), (snap)=>{
+      if (snap.exists()) {
+        currentDeck = snap.data();
+        render();
+      }
+    });
+  }
+
+  function normalizeId(s){ return (s||'').trim().toLowerCase(); }
+  function fmtCount(n){ return `${n} card${n===1?'':'s'}`; }
+  function escapeHtml(s){ return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m])); }
+
+  /* ========= Deck view toggle ========= */
+  const listEl = byId('list');
+  const toggleBtn = byId('toggleViewBtn');
+  let viewMode = localStorage.getItem('deck_view') || 'grid';
+  function applyView(){
+    listEl.classList.remove('grid','list');
+    listEl.classList.add(viewMode);
+    toggleBtn.textContent = viewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View';
+  }
+  applyView();
+  toggleBtn.onclick = () => {
+    viewMode = (viewMode === 'grid') ? 'list' : 'grid';
+    localStorage.setItem('deck_view', viewMode);
+    applyView();
+    render();
+  };
+
+  /* ========= Render deck ========= */
+  function render(){
+    const list = byId('list');
+    list.innerHTML = '';
+    const cards = (currentDeck?.cards)||[];
+    const total = cards.reduce((sum,c)=> sum + Number(c.qty||1), 0);
+    countLabel.textContent = `${fmtCount(cards.length)} • ${total} total`;
+
+    cards.forEach(c=>{
+      const li = document.createElement('li');
+
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = c.name || c.id;
+      if (c.image) img.src = c.image; else img.style.display='none';
+      img.onerror = ()=>{ img.style.display='none'; };
+
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.innerHTML = viewMode === 'grid'
+        ? `<span><strong>${escapeHtml(c.name||c.id)}</strong>${c.name?` <span class="muted">(${escapeHtml(c.id)})</span>`:''}</span> <span class="pill">x${c.qty||1}</span>`
+        : `<strong>${escapeHtml(c.name||c.id)}</strong>${c.name?` <span class="muted">(${escapeHtml(c.id)})</span>`:''} <span class="pill">x${c.qty||1}</span>`;
+
+      const added = document.createElement('div');
+      added.className = 'muted';
+      added.textContent = `Added ${new Date(c.added_at||Date.now()).toLocaleString()}`;
+
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+      const inc = document.createElement('button'); inc.textContent = '+1'; inc.className='btn'; inc.onclick=()=> changeQty(c.id, +1);
+      const dec = document.createElement('button'); dec.textContent = '-1'; dec.className='btn'; dec.onclick=()=> changeQty(c.id, -1);
+      const del = document.createElement('button'); del.textContent = 'Remove'; del.className = 'btn'; del.onclick = ()=> removeCard(c.id);
+      controls.appendChild(inc); controls.appendChild(dec); controls.appendChild(del);
+
+      if (viewMode === 'grid') {
+        li.appendChild(img); li.appendChild(title); li.appendChild(added); li.appendChild(controls);
+      } else {
+        img.classList.add('thumb');
+        li.appendChild(img); meta.appendChild(title); meta.appendChild(added); li.appendChild(meta); li.appendChild(controls);
+      }
+      list.appendChild(li);
+    });
+
+    debouncedBackfill();
+  }
+
+  /* ========= Image backfill ========= */
+  const POKETCG_KEY = '9293fbfc-d890-4d06-8ca8-88380d376826'; // optional
+  const idCache = new Map();
+  const imageCache = new Map();
+  function parseSetNumFromId(id){
+    const m = String(id||'').toLowerCase().match(/^([a-z0-9]+)-([a-z0-9]+)$/);
+    return m ? { set:m[1], num:m[2] } : null;
+  }
+  const cdnUrl = (set,num)=>`https://images.pokemontcg.io/${set}/${num}.png`;
+  async function urlExists(url){ try { const r = await fetch(url, { method:'HEAD' }); return r.ok; } catch { return false; } }
+  async function fetchCardById(id){
+    const norm = (id||'').toLowerCase();
+    if (idCache.has(norm)) return idCache.get(norm);
+    const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+    const r = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(norm)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const card = j.data || null; if(card) idCache.set(norm, card); return card;
+  }
+  async function resolveImageForCardId(id){
+    const norm = (id||'').toLowerCase();
+    if (imageCache.has(norm)) return imageCache.get(norm);
+    const viaId = await fetchCardById(norm);
+    if (viaId?.images?.small){ imageCache.set(norm, viaId.images.small); return viaId.images.small; }
+    const sn = parseSetNumFromId(norm);
+    if (sn){
+      const fast = cdnUrl(sn.set, sn.num);
+      if (await urlExists(fast)) { imageCache.set(norm, fast); return fast; }
+      const headers = POKETCG_KEY ? { 'X-Api-Key': POKETCG_KEY } : {};
+      const q = encodeURIComponent(`set.id:${sn.set} number:${sn.num}`);
+      const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`, { headers });
+      if (r.ok){ const j = await r.json(); const c = (j.data||[])[0]; if (c?.images?.small){ imageCache.set(norm, c.images.small); return c.images.small; } }
+    }
+    imageCache.set(norm, ''); return '';
+  }
+  function debounce(fn, wait=300){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), wait); }; }
+  const debouncedBackfill = debounce(async ()=>{
+    const cards = (currentDeck?.cards)||[];
+    const next = [...cards];
+    let changed = false;
+    for (let i=0;i<next.length;i++){
+      if (!next[i].image){
+        const img = await resolveImageForCardId(next[i].id);
+        if (img){ next[i] = { ...next[i], image: img }; changed = true; }
+      }
+    }
+    if (changed){ await updateDoc(deckRef(), { cards: next, updated_at: serverTimestamp() }); }
+  }, 250);
+
+  /* ========= Toast + count bump ========= */
+  const toast = document.createElement('div'); toast.id='toast'; document.body.appendChild(toast);
+  function showToast(msg){ toast.textContent = msg; toast.c    #toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); }
     @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.12)} 100%{transform:scale(1)} }
     .bump { animation:bump .35s ease; }
 
