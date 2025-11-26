@@ -106,7 +106,16 @@
       <div class="row" style="align-items:center; justify-content:space-between; gap:12px;">
         <div>
           <strong>No deck loaded.</strong>
-          <div class="muted">Create a new deck (generates a secret link), or paste an existing deck ID.</div>
+          <div class="muted">
+            Enter passcode to create a new deck (generates a secret link), or paste an existing deck ID.
+          </div>
+          <div class="spacer"></div>
+          <input
+            id="createPass"
+            type="password"
+            placeholder="Passcode required to create new deck"
+            style="width:100%; max-width:320px;"
+          />
         </div>
         <div class="row"><button id="createBtn" class="btn primary">Create new deck</button></div>
       </div>
@@ -256,6 +265,48 @@
 
   // Multi-tab persistence to avoid “exclusive access” error
   try { await enableIndexedDbPersistence(db, { synchronizeTabs: true }); } catch (_) {}
+
+  /* ========= Passcode protection for "Create new deck" ========= */
+  // SHA-256 hash of your real passcode:
+  // 8GKc1d3lIAW6WnwIGB5KOvsEWJRnigztSvbrj43L36SJy9P7gc
+  const PASS_HASH = 'baf5a62bd69896ba4f1beeba0690a6fd3b788785d5383d196894f52a7dd2556b';
+
+  function bufToHex(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i].toString(16).padStart(2, '0');
+      hex += b;
+    }
+    return hex;
+  }
+
+  async function hashPasscode(input) {
+    const enc = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest('SHA-256', enc);
+    return bufToHex(digest);
+  }
+
+  async function verifyPasscode() {
+    const inputEl = byId('createPass');
+    const val = (inputEl?.value || '').trim();
+    if (!val) {
+      alert('Please enter the passcode to create a new deck.');
+      return false;
+    }
+    try {
+      const h = await hashPasscode(val);
+      if (h !== PASS_HASH) {
+        alert('Incorrect passcode.');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Passcode check failed', e);
+      alert('Passcode check failed. Please try again.');
+      return false;
+    }
+  }
 
   /* ========= Helpers & state ========= */
   const $ = s => document.querySelector(s);
@@ -506,12 +557,17 @@
   }
 
   /* ========= Wire up (deck controls) ========= */
-  byId('createBtn').onclick = async ()=>{
+  byId('createBtn').onclick = async () => {
+    // Require correct passcode before allowing deck creation
+    const ok = await verifyPasscode();
+    if (!ok) return;
+
     const id = crypto.randomUUID();
     setSlug(id);
     await setDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
     await subscribe();
   };
+
   byId('openExistingBtn').onclick = ()=>{
     const id = byId('existingId').value.trim();
     if (!id) return alert('Paste a deck UUID first.');
