@@ -267,8 +267,6 @@
   try { await enableIndexedDbPersistence(db, { synchronizeTabs: true }); } catch (_) {}
 
   /* ========= Passcode protection for "Create new deck" ========= */
-  // SHA-256 hash of your real passcode:
-  // 8GKc1d3lIAW6WnwIGB5KOvsEWJRnigztSvbrj43L36SJy9P7gc
   const PASS_HASH = 'baf5a62bd69896ba4f1beeba0690a6fd3b788785d5383d196894f52a7dd2556b';
 
   function bufToHex(buffer) {
