@@ -324,7 +324,7 @@
     slugSpan.textContent = slug || '—';
     if (slug) {
       const url = `${location.origin}${location.pathname}?deck=${encodeURIComponent(slug)}`;
-      deckUrlInput.value = url;
+      if (deckUrlInput) deckUrlInput.value = url;
       if (push) history.replaceState(null, '', url);
       $('#noDeck').classList.add('hidden');
       $('#app').classList.remove('hidden');
@@ -339,21 +339,26 @@
   let unsub = null;
   let currentDeck = null;
 
-  async function ensureDeckExists(){
-    if (!slug) return;
+  // Check if a given deck ID already exists in Firestore
+  async function deckExists() {
+    if (!slug) return false;
     const snap = await getDoc(deckRef());
-    if (!snap.exists()) {
-      await setDoc(deckRef(), { cards: [], updated_at: serverTimestamp() });
-    }
+    return snap.exists();
   }
-  async function subscribe(){
+
+  // Subscribe ONLY to an existing deck; do NOT auto-create documents
+  async function subscribe() {
     if (!slug) return;
-    if (unsub) { unsub(); unsub=null; }
-    await ensureDeckExists();
-    unsub = onSnapshot(deckRef(), (snap)=>{
+    if (unsub) { unsub(); unsub = null; }
+
+    unsub = onSnapshot(deckRef(), (snap) => {
       if (snap.exists()) {
         currentDeck = snap.data();
         render();
+      } else {
+        // If deck is deleted while viewing, reset back to "No deck loaded"
+        currentDeck = null;
+        setSlug('', false);
       }
     });
   }
@@ -568,12 +573,22 @@
     await subscribe();
   };
 
-  byId('openExistingBtn').onclick = ()=>{
+  byId('openExistingBtn').onclick = async () => {
     const id = byId('existingId').value.trim();
     if (!id) return alert('Paste a deck UUID first.');
-    setSlug(id);
-    subscribe();
+
+    setSlug(id); // update slug + UI label
+
+    const exists = await deckExists();
+    if (!exists) {
+      alert('No such deck ID exists in the database.');
+      setSlug('', false); // revert to "No deck loaded"
+      return;
+    }
+
+    await subscribe();
   };
+
   byId('addBtn').onclick = async () => {
     const id = byId('cardId').value;
     const name = byId('cardName').value;
@@ -756,7 +771,17 @@
   byId('viewDeckBtn').onclick = viewDeck;
 
   /* Boot */
-  if (slug) { subscribe(); }
+  if (slug) {
+    (async () => {
+      const exists = await deckExists();
+      if (exists) {
+        await subscribe();
+      } else {
+        alert('This deck ID does not exist.');
+        setSlug('', false); // show "No deck loaded"
+      }
+    })();
+  }
 </script>
 </body>
 </html>
